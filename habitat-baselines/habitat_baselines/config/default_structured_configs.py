@@ -33,6 +33,8 @@ class WBConfig(HabitatBaselinesBaseConfig):
     # The run name to assign to the run. If not specified,
     # W&B will randomly assign a name.
     run_name: str = ""
+    resume: str = ""
+    mode: str = ""
 
 
 @dataclass
@@ -281,10 +283,13 @@ class PolicyConfig(HabitatBaselinesBaseConfig):
     action_dist: ActionDistributionConfig = ActionDistributionConfig()
     obs_transforms: Dict[str, ObsTransformConfig] = field(default_factory=dict)
     hierarchical_policy: HierarchicalPolicyConfig = MISSING
-    ovrl: bool = False
-    no_downscaling: bool = False
     use_augmentations: bool = False
     deterministic_actions: bool = False
+    global_pool: bool = False
+    use_cls: bool = False
+    compression_kernel_size: int = 3
+    input_image_size: int = 128 
+    dont_embed_categories: bool = False
 
 
 @dataclass
