@@ -290,6 +290,7 @@ class PolicyConfig(HabitatBaselinesBaseConfig):
     compression_kernel_size: int = 3
     input_image_size: int = 128 
     dont_embed_categories: bool = False
+    pretrained_state_encoder: str = ""
 
 
 @dataclass

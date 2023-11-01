@@ -24,7 +24,7 @@ from habitat.tasks.rearrange.utils import (
     get_camera_transform,
     rearrange_logger,
 )
-from habitat.utils.geometry_utils import cosine
+from habitat.utils.geometry_utils import cosine, angle_between
 
 
 @registry.register_measure
@@ -44,6 +44,60 @@ class PickDistanceToGoal(
             .articulated_agent.ee_transform()
             .translation
         )
+
+
+@registry.register_measure
+class PickAngleToGoal(UsesArticulatedAgentInterface, Measure):
+    """The measure calculates an angle towards the goal. 
+    """
+
+    cls_uuid: str = "pick_angle_to_goal"
+
+    def __init__(self, sim, *args, **kwargs):
+        super().__init__()
+        self._sim = sim
+
+    def _get_uuid(self, *args, **kwargs) -> str:
+        return self.cls_uuid
+
+    def reset_metric(self, episode, *args, **kwargs):
+        self._metric = None
+        self.update_metric(episode=episode, *args, **kwargs)  # type: ignore
+
+    def get_camera_angle(self, obj_pos):
+        """Calculates angle between gripper line-of-sight and given global position."""
+        # Get the camera transformation
+        cam_T = get_camera_transform(self._sim)
+        # Get object location in camera frame
+        cam_obj_pos = cam_T.inverted().transform_point(obj_pos).normalized()
+
+        # Get angle between (normalized) location and the vector that the camera should
+        # look at
+        return angle_between(cam_obj_pos, mn.Vector3(0, 1, 0))    
+    
+    def update_metric(
+        self, episode, task, *args, **kwargs
+    ):
+        # closest based on l2 distance
+        closest_pos = self.get_closest_goal(episode)
+        new_angle = self.get_camera_angle(closest_pos)
+
+        self._metric = new_angle
+
+    def get_closest_goal(self, episode):
+        # Find the goal that is closest based on l2-distance
+        targets = np.array(
+            [goal.position for goal in episode.candidate_objects]
+        )
+        closest_goal_index = np.argmin(
+            np.linalg.norm(
+                np.expand_dims(self._sim.articulated_agent.base_pos, 0)
+                - targets,
+                axis=1,
+            )
+        )
+        targ = targets[closest_goal_index]
+        return targ
 
 
 @registry.register_measure
@@ -116,6 +170,7 @@ class RearrangePickReward(RearrangeReward):
 
     def __init__(self, *args, sim, config, task, **kwargs):
         self.cur_dist = -1.0
+        self.cur_angle = None
         self._prev_picked = False
         self._metric = None
         self._pick_reward = config.pick_reward
@@ -154,6 +209,7 @@ class RearrangePickReward(RearrangeReward):
             )
 
         self.cur_dist = -1.0
+        self.cur_angle = None
         self._prev_picked = self._sim.grasp_mgr.snap_idx is not None
 
         super().reset_metric(
@@ -163,35 +219,6 @@ class RearrangePickReward(RearrangeReward):
             observations=observations,
             **kwargs,
         )
-
-    def get_camera_angle_reward(self, obj_pos):
-        """Calculates angle between gripper line-of-sight and given global position."""
-
-        # Get the camera transformation
-        cam_T = get_camera_transform(self._sim)
-        # Get object location in camera frame
-        cam_obj_pos = cam_T.inverted().transform_point(obj_pos).normalized()
-
-        # Get angle between (normalized) location and the vector that the camera should
-        # look at
-        reward = cosine(cam_obj_pos, mn.Vector3(0, 1, 0))
-
-        return reward
-
-    def closest_goal_position(self, episode):
-        # Find the goal that is closest based on l2-distance
-        targets = np.array(
-            [goal.position for goal in episode.candidate_objects]
-        )
-        closest_goal_index = np.argmin(
-            np.linalg.norm(
-                np.expand_dims(self._sim.articulated_agent.base_pos, 0)
-                - targets,
-                axis=1,
-            )
-        )
-        targ = targets[closest_goal_index]
-        return targ
 
     def update_metric(self, *args, episode, task, observations, **kwargs):
         super().update_metric(
@@ -212,6 +239,10 @@ class RearrangePickReward(RearrangeReward):
         ee_to_rest_distance = task.measurements.measures[
             EndEffectorToRestDistance.cls_uuid
         ].get_metric()
+        new_angle = task.measurements.measures[
+            PickAngleToGoal.cls_uuid
+        ].get_metric()
+
 
         snapped_id = self._sim.grasp_mgr.snap_idx
         cur_picked = snapped_id is not None
@@ -236,6 +267,7 @@ class RearrangePickReward(RearrangeReward):
                 # If we just transitioned to the next stage our current
                 # distance is stale.
                 self.cur_dist = -1
+                self.cur_angle = None
             else:
                 # picked the wrong object
                 self._metric -= self._wrong_pick_pen
@@ -246,6 +278,7 @@ class RearrangePickReward(RearrangeReward):
                     self._task.should_end = True
                 self._prev_picked = cur_picked
                 self.cur_dist = -1
+                self.cur_angle = None
                 return
 
         # If _sparse_reward is True, use dense reward only after the object gets picked for bringing arm to resting position
@@ -268,12 +301,14 @@ class RearrangePickReward(RearrangeReward):
                 and self.cur_dist != -1
                 and self.cur_dist < self._angle_reward_min_dist
             ):
-                # closest based on l2 distance
-                closest_pos = self.closest_goal_position(episode)
+                if self.cur_angle == None:
+                    diff_angle = 0.0
+                else:
+                    diff_angle = self.cur_angle - new_angle
                 self._metric += (
-                    self._angle_reward_scale
-                    * self.get_camera_angle_reward(closest_pos)
+                    self._angle_reward_scale * diff_angle
                 )
+        self.cur_angle = new_angle
         self.cur_dist = dist_to_goal
 
         if not cur_picked and self._prev_picked:

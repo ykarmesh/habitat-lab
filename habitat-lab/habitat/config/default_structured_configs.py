@@ -1403,6 +1403,14 @@ class PickDistanceToGoalMeasurementConfig(DistanceToGoalMeasurementConfig):
 
 
 @dataclass
+class PickAngleToGoalMeasurementConfig(MeasurementConfig):
+    r"""
+    Rearrangement only. Measures the angle between the forward direction of the agent and the direction to the goal position.
+    """
+    type: str = "PickAngleToGoal"
+
+
+@dataclass
 class PickDistanceToGoalRewardMeasurementConfig(MeasurementConfig):
     type: str = "PickDistanceToGoalReward"
 
@@ -2477,6 +2485,12 @@ cs.store(
     group="habitat/task/measurements",
     name="pick_distance_to_goal",
     node=PickDistanceToGoalMeasurementConfig,
+)
+cs.store(
+    package="habitat.task.measurements.pick_angle_to_goal",
+    group="habitat/task/measurements",
+    name="pick_angle_to_goal",
+    node=PickAngleToGoalMeasurementConfig,
 )
 cs.store(
     package="habitat.task.measurements.pick_distance_to_goal_reward",

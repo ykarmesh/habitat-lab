@@ -9,6 +9,7 @@ from typing import Optional, Union
 import magnum as mn
 import numpy as np
 from gym import spaces
+from scipy import stats
 
 import habitat_sim
 from habitat.articulated_agents.robots.spot_robot import SpotRobot
@@ -243,7 +244,7 @@ class GazeGraspAction(MagicGraspAction):
                 cam_pos = (
                     self._sim.agents[0]
                     .get_state()
-                    .sensor_states["head_depth"]
+                    .sensor_states["head_panoptic"]
                     .position
                 )
             else:
@@ -291,13 +292,13 @@ class GazeGraspAction(MagicGraspAction):
             h_off = height // 2 - s // 2
             w_off = width // 2 - s // 2
             center_square = obj_seg[h_off : h_off + s, w_off : w_off + s]
-            panoptic_masked = panoptic_img.squeeze(2) * obj_seg
+            panoptic_masked = panoptic_img.squeeze(2) * obj_seg.squeeze(2)
             if np.sum(center_square) > 1:
                 panoptic_center = panoptic_masked[
                     h_off : h_off + s, w_off : w_off + s
                 ]
                 center_obj_id = (
-                    panoptic_center[panoptic_center > 0][0]
+                    stats.mode(panoptic_center[panoptic_center > 0])[0]
                     - self._object_ids_start
                 )
             else:
