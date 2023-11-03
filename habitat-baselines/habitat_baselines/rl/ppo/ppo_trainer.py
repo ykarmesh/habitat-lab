@@ -827,13 +827,14 @@ class PPOTrainer(BaseRLTrainer):
             ckpt_dict = self.load_checkpoint(
                 checkpoint_path, map_location="cpu"
             )
-            step_id = ckpt_dict["extra_state"]["step"]
-            logger.info(f"Loaded checkpoint trained for {step_id} steps")
+            if "extra_state" in ckpt_dict:
+                step_id = ckpt_dict["extra_state"]["step"]
+                logger.info(f"Loaded checkpoint trained for {step_id} steps")
         else:
             ckpt_dict = {"config": None}
 
         config = self._get_resume_state_config_or_new_config(
-            ckpt_dict["config"]
+            ckpt_dict["config"] if "config" in ckpt_dict else None
         )
 
         with read_write(config):

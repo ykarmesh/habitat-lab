@@ -112,8 +112,7 @@ class PointNavResNetPolicy(NetPolicy):
                 fuse_keys=fuse_keys,
                 force_blind_policy=force_blind_policy,
                 discrete_actions=discrete_actions,
-                no_downscaling=hasattr(policy_config, "no_downscaling")
-                and policy_config.no_downscaling,
+                no_downscaling=True,
                 ovrl=hasattr(policy_config, "ovrl") and policy_config.ovrl,
                 use_augmentations=getattr(
                     policy_config, "use_augmentations", False
@@ -169,7 +168,7 @@ class ResNetEncoder(nn.Module):
         ngroups: int = 32,
         spatial_size: int = 128,
         make_backbone=None,
-        no_downscaling=False,
+        no_downscaling=True,
         use_augmentations=False,
         normalize_visual_inputs: bool = False,
     ):
