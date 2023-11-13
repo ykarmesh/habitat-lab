@@ -293,6 +293,7 @@ class PPOTrainer(BaseRLTrainer):
                 batch[
                     PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY
                 ] = self._encoder(batch)
+                batch.pop("head_rgb", None)
 
         self._agent.rollouts.insert_first_observations(batch)
 
@@ -477,6 +478,7 @@ class PPOTrainer(BaseRLTrainer):
                 batch[
                     PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY
                 ] = self._encoder(batch)
+                batch.pop("head_rgb", None)
 
         self._agent.rollouts.insert(
             next_observations=batch,

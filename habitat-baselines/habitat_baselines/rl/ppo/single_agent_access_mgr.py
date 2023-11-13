@@ -296,6 +296,8 @@ def get_rollout_obs_space(obs_space, actor_critic, config):
                 **obs_space.spaces,
             }
         )
+        # remove head_rgb from obs_space because we are storing the visual feature
+        obs_space.spaces.pop("head_rgb", None)
     return obs_space
 
 
