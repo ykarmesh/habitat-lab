@@ -291,6 +291,7 @@ class PolicyConfig(HabitatBaselinesBaseConfig):
     input_image_size: int = 128 
     dont_embed_categories: bool = False
     pretrained_state_encoder: str = ""
+    separate_attn_cnn: bool = True
 
 
 @dataclass

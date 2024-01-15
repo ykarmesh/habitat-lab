@@ -1104,7 +1104,9 @@ class PPOTrainer(BaseRLTrainer):
                         # Since the starting frame of the next episode is the final frame.
                         rgb_frames[i] = rgb_frames[i][-1:]
 
-                    if len(stats_episodes) % 50 == 0:
+                    if len(stats_episodes) % 50 == 0 or len(
+                        stats_episodes
+                    ) == number_of_eval_episodes:
                         save_dir = (
                             self.config.habitat_baselines.checkpoint_folder
                         )
@@ -1112,7 +1114,7 @@ class PPOTrainer(BaseRLTrainer):
                         if os.path.isfile(save_dir):
                             save_dir = os.path.dirname(save_dir)
                         np.save(
-                            os.path.join(save_dir, "all_episode_stats.npy"),
+                            os.path.join(save_dir, "all_episode_stats_{}.npy".format(checkpoint_index)),
                             np.array(stats_episodes),
                         )
 

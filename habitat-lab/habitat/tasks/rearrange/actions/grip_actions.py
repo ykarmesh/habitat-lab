@@ -344,7 +344,7 @@ class GazeGraspAction(MagicGraspAction):
         if not isinstance(self._sim.ep_info, OVMMEpisode):
             raise NotImplementedError
         allowed_scene_obj_ids = [
-            int(g.object_id) for g in self._sim.ep_info.candidate_objects
+            int(g.object_id) for g in self._sim.ep_info.candidate_objects_hard
         ]
         ee_pos = self.cur_articulated_agent.ee_transform().translation
         ee_to_objects = (
