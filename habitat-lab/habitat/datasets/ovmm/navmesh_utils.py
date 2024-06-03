@@ -78,29 +78,6 @@ def is_navigable_given_robot_navmesh(
     return True
 
 
-def is_accessible(sim, point, nav_to_min_distance) -> bool:
-    """
-    Return True if the point is within a threshold distance of the nearest
-    navigable point and that the nearest navigable point is on the same
-    navigation mesh.
-
-    Note that this might not catch all edge cases since the distance is
-    based on Euclidean distance. The nearest navigable point may be
-    separated from the object by an obstacle.
-    """
-    if nav_to_min_distance == -1:
-        return True
-    snapped = sim.pathfinder.snap_point(point)
-    if snapped is None or np.isnan(snapped).any():
-        return False
-    island_idx: int = sim.pathfinder.get_island(snapped)
-    dist = float(np.linalg.norm(np.array((snapped - point))[[0, 2]]))
-    return (
-        dist < nav_to_min_distance
-        and island_idx == sim.navmesh_classification_results["active_island"]
-    )
-
-
 def compute_navmesh_island_classifications(
     sim: habitat_sim.Simulator, active_indoor_threshold=0.85, debug=False
 ):

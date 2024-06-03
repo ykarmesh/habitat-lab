@@ -12,7 +12,21 @@ from habitat.articulated_agents.mobile_manipulator import (
 )
 
 
+class StretchJointStates:
+    """Joint states for the Stretch robot in different stages of the task."""
+
+    # TODO: Match with pregrasp from home-robot
+    PRE_GRASP = np.array(
+        [0.0] * 4 + [0.775, 0.0, -np.pi / 2, 0.0, -np.pi / 2, -np.pi / 4]
+    )
+    NAVIGATION = np.array(
+        [0.0] * 4 + [0.775, 0.0, -np.pi / 2, 0.0, 0.0, -np.pi / 6]
+    )
+
+
 class StretchRobot(MobileManipulator):
+    cls_uuid: str = "stretch_robot"
+
     def _get_fetch_params(self):
         return MobileManipulatorParams(
             arm_joints=[28, 27, 26, 25, 23, 31, 33, 34, 7, 8],
@@ -43,15 +57,15 @@ class StretchRobot(MobileManipulator):
                 ),
             },
             gripper_closed_state=np.array([0.0, 0.0], dtype=np.float32),
-            gripper_open_state=np.array([0.6, 0.6], dtype=np.float32),
-            gripper_state_eps=0.1,
+            gripper_open_state=np.array([0.02, 0.02], dtype=np.float32),
+            gripper_state_eps=0.01,
             arm_mtr_pos_gain=0.3,
             arm_mtr_vel_gain=0.3,
             arm_mtr_max_impulse=10.0,
             wheel_mtr_pos_gain=0.0,
             wheel_mtr_vel_gain=1.3,
             wheel_mtr_max_impulse=10.0,
-            base_offset=mn.Vector3(0.0, -0.5, 0.0),
+            base_offset=mn.Vector3(0.0, 0.0, 0.0),
             base_link_names={
                 "link_right_wheel",
                 "link_left_wheel",
@@ -82,6 +96,8 @@ class StretchRobot(MobileManipulator):
 
 
 class StretchRobotNoWheels(StretchRobot):
+    cls_uuid: str = "stretch_robot_no_wheels"
+
     def __init__(
         self, urdf_path, sim, limit_robo_joints=True, fixed_base=True
     ):

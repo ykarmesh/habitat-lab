@@ -5,3 +5,11 @@ defaults:
   - override /habitat/simulator/agents@habitat.simulator.agents.main_agent: stretch
   - override /habitat/task/rearrange/actions: stretch_base_arm_empty
   - _self_
+
+# Config for empty task to explore the scene.
+habitat:
+  simulator:
+    additional_object_paths:
+      - "data/objects/ycb/configs/"
+      - "data/objects/amazon_berkeley/configs/"
+      - "data/objects/google_object_dataset/configs/"
