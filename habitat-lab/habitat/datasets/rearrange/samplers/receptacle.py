@@ -10,17 +10,21 @@ import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import corrade as cr
 import magnum as mn
 import numpy as np
+import trimesh
+from tqdm import tqdm
 
 import habitat.sims.habitat_simulator.sim_utilities as sutils
 import habitat_sim
 from habitat.core.logging import logger
+from habitat.datasets.rearrange.viewpoints import generate_viewpoints
 from habitat.datasets.rearrange.navmesh_utils import is_accessible
 from habitat.sims.habitat_simulator.debug_visualizer import dblr_draw_bb
+from habitat.tasks.nav.object_nav_task import ObjectViewLocation
 from habitat.tasks.rearrange.utils import get_ao_link_aabb, get_rigid_aabb
 from habitat.utils.geometry_utils import random_triangle_point
 from habitat_sim.utils.common import quat_from_two_vectors as qf2v
@@ -87,6 +91,19 @@ class Receptacle(ABC):
         """
         return mn.Range3D()
 
+    @property
+    @abstractmethod
+    def total_area(self) -> float:
+        """
+        Get total area of receptacle surface
+        """
+
+    def get_local_transform(self, sim: habitat_sim.Simulator) -> mn.Matrix4:
+        """
+        Returns transformation that can be used for transforming from world space to receptacle's local space
+        """
+        return self.get_global_transform(sim).inverted()
+
     @abstractmethod
     def sample_uniform_local(
         self, sample_region_scale: float = 1.0
@@ -131,6 +148,32 @@ class Receptacle(ABC):
         local_sample = self.sample_uniform_local(sample_region_scale)
         return self.get_global_transform(sim).transform_point(local_sample)
 
+    def get_surface_center(self, sim: habitat_sim.Simulator) -> mn.Vector3:
+        """
+        Returns the center of receptacle surface in world space
+        """
+        local_center = self.get_local_surface_center(sim)
+        return self.get_global_transform(sim).transform_point(local_center)
+
+    @abstractmethod
+    def get_local_surface_center(
+        self, sim: habitat_sim.Simulator
+    ) -> mn.Vector3:
+        """
+        Returns the center of receptacle surface in local space
+        """
+
+    @abstractmethod
+    def check_if_point_on_surface(
+        self,
+        sim: habitat_sim.Simulator,
+        point: mn.Vector3,
+        threshold: float = 0.05,
+    ) -> bool:
+        """
+        Check if point lies within a `threshold` distance of the receptacle's surface
+        """
+
     @abstractmethod
     def debug_draw(
         self, sim: habitat_sim.Simulator, color: Optional[mn.Color4] = None
@@ -150,6 +193,10 @@ class OnTopOfReceptacle(Receptacle):
         super().__init__(name)
         self._places = places
 
+    @property
+    def total_area(self) -> float:
+        raise NotImplementedError
+
     def set_episode_data(self, episode_data):
         self.episode_data = episode_data
 
@@ -164,6 +211,27 @@ class OnTopOfReceptacle(Receptacle):
         # return sampled_obj.transformation
 
         return mn.Matrix4([[targ_T[j][i] for j in range(4)] for i in range(4)])
+
+    def check_if_point_on_surface(
+        self,
+        sim: habitat_sim.Simulator,
+        point: mn.Vector3,
+        threshold: float = 0.05,
+    ) -> bool:
+        """
+        Returns True if the point lies within the `threshold` distance of the lower bound along the "up" axis and within the bounds along other axes
+        """
+        # TODO:
+        raise NotImplementedError
+
+    def get_local_surface_center(
+        self, sim: habitat_sim.Simulator
+    ) -> mn.Vector3:
+        """
+        Returns the center of receptacle surface in local space
+        """
+        # TODO:
+        raise NotImplementedError
 
     def debug_draw(
         self, sim: habitat_sim.Simulator, color: Optional[mn.Color4] = None
@@ -205,6 +273,10 @@ class AABBReceptacle(Receptacle):
         self.rotation = rotation if rotation is not None else mn.Quaternion()
 
     @property
+    def total_area(self) -> float:
+        return self._bounds.size_x() * self._bounds.size_z()
+
+    @property
     def bounds(self) -> mn.Range3D:
         """
         AABB of the Receptacle in local space.
@@ -220,13 +292,13 @@ class AABBReceptacle(Receptacle):
         :param sample_region_scale: defines a XZ scaling of the sample region around its center. For example to constrain object spawning toward the center of a receptacle.
         """
         scaled_region = mn.Range3D.from_center(
-            self.bounds.center(), sample_region_scale * self.bounds.size() / 2
+            self._bounds.center(), sample_region_scale * self._bounds.size() / 2
         )
 
         # NOTE: does not scale the "up" direction
         sample_range = [scaled_region.min, scaled_region.max]
-        sample_range[0][self.up_axis] = self.bounds.min[self.up_axis]
-        sample_range[1][self.up_axis] = self.bounds.max[self.up_axis]
+        sample_range[0][self.up_axis] = self._bounds.min[self.up_axis]
+        sample_range[1][self.up_axis] = self._bounds.max[self.up_axis]
 
         return np.random.uniform(sample_range[0], sample_range[1])
 
@@ -256,7 +328,7 @@ class AABBReceptacle(Receptacle):
             l2w4 = mn.Matrix4.from_(local_to_world.to_matrix(), mn.Vector3())
 
             # apply the receptacle rotation from the bb center
-            T = mn.Matrix4.from_(mn.Matrix3(), self.bounds.center())
+            T = mn.Matrix4.from_(mn.Matrix3(), self._bounds.center())
             R = mn.Matrix4.from_(self.rotation.to_matrix(), mn.Vector3())
             # translate frame to center, rotate, translate back
             l2w4 = l2w4.__matmul__(T.__matmul__(R).__matmul__(T.inverted()))
@@ -264,6 +336,41 @@ class AABBReceptacle(Receptacle):
 
         # base class implements getting transform from attached objects
         return super().get_global_transform(sim)
+
+    def get_local_surface_center(
+        self, sim: habitat_sim.Simulator
+    ) -> mn.Vector3:
+        local_center = self._bounds.center()
+        local_center[self.up_axis] = self._bounds.min[self.up_axis]
+        return local_center
+
+    def check_if_point_on_surface(
+        self,
+        sim: habitat_sim.Simulator,
+        point: mn.Vector3,
+        threshold: float = 0.05,
+    ) -> bool:
+        """
+        Returns True if the point lies within the `threshold` distance of the lower bound along the "up" axis and within the bounds along other axes
+        """
+        local_point = self.get_local_transform(sim).transform_point(point)
+        bounds = self._bounds
+        on_surface = True
+        bounds_min = bounds.min
+        bounds_max = bounds.max
+        for i in range(3):
+            if i == self.up_axis:
+                on_surface = (
+                    on_surface
+                    and np.abs(bounds_min[i] - local_point[i]) < threshold
+                )
+            else:
+                on_surface = (
+                    on_surface
+                    and bounds_min[i] <= local_point[i]
+                    and local_point[i] <= bounds_max[i]
+                )
+        return on_surface
 
     def debug_draw(
         self, sim: habitat_sim.Simulator, color: Optional[mn.Color4] = None
@@ -277,7 +384,7 @@ class AABBReceptacle(Receptacle):
         """
         dblr_draw_bb(
             sim.get_debug_line_render(),
-            self.bounds,
+            self._bounds,
             self.get_global_transform(sim),
             color,
         )
@@ -334,7 +441,7 @@ class TriangleMeshReceptacle(Receptacle):
         assert_triangles(mesh_data.indices)
 
         # pre-compute the normalized cumulative area of all triangle faces for later sampling
-        self.total_area = 0.0
+        self._total_area = 0.0
         triangles = []
         for f_ix in range(int(len(mesh_data.indices) / 3)):
             v = self.get_face_verts(f_ix)
@@ -344,10 +451,10 @@ class TriangleMeshReceptacle(Receptacle):
             self.area_weighted_accumulator.append(
                 0.5 * mn.math.cross(w1, w2).length()
             )
-            self.total_area += self.area_weighted_accumulator[-1]
+            self._total_area += self.area_weighted_accumulator[-1]
         for f_ix in range(len(self.area_weighted_accumulator)):
             self.area_weighted_accumulator[f_ix] = (
-                self.area_weighted_accumulator[f_ix] / self.total_area
+                self.area_weighted_accumulator[f_ix] / self._total_area
             )
             if f_ix > 0:
                 self.area_weighted_accumulator[
@@ -360,6 +467,14 @@ class TriangleMeshReceptacle(Receptacle):
             maxv = mn.math.max(maxv, v)
         minmax = (minv, maxv)
         self._bounds = mn.Range3D(minmax)
+        # TODO: Remove dependency on trimesh
+        self.trimesh = trimesh.Trimesh(
+            **trimesh.triangles.to_kwargs(triangles)
+        )
+
+    @property
+    def total_area(self) -> float:
+        return self._total_area
 
     @property
     def bounds(self) -> mn.Range3D:
@@ -405,6 +520,25 @@ class TriangleMeshReceptacle(Receptacle):
         sample_val = random.random()
         tri_index = find_ge(self.area_weighted_accumulator, sample_val)
         return tri_index
+
+    def get_local_surface_center(
+        self, sim: habitat_sim.Simulator
+    ) -> mn.Vector3:
+        return self.trimesh.centroid
+
+    def check_if_point_on_surface(
+        self,
+        sim: habitat_sim.Simulator,
+        point: mn.Vector3,
+        threshold: float = 0.05,
+    ) -> bool:
+        local_point = self.get_local_transform(sim).transform_point(point)
+        return (
+            np.abs(
+                trimesh.proximity.signed_distance(self.trimesh, [local_point])
+            )
+            < threshold
+        )
 
     def sample_uniform_local(
         self, sample_region_scale: float = 1.0
@@ -834,6 +968,30 @@ def parse_receptacles_from_user_config(
                 )
 
     return receptacles
+
+
+def get_receptacle_viewpoints(
+    sim: habitat_sim.Simulator,
+    receptacles: List[Receptacle],
+    agent_camera_height: float,
+    debug_viz: bool = False,
+) -> Tuple[Dict[str, List[ObjectViewLocation]], List[Receptacle]]:
+    viewpoints = {}
+    viewable_receptacles = []
+    logger.info("Getting receptacle viewpoints...")
+    for receptacle in tqdm(receptacles):
+        handle = receptacle.parent_object_handle
+        if handle in viewpoints:
+            continue
+        obj_mgr = get_obj_manager_for_receptacle(sim, receptacle)
+        receptacle_obj = obj_mgr.get_object_by_handle(handle)
+        receptacle_viewpoints = generate_viewpoints(
+            sim, receptacle_obj, agent_camera_height, debug_viz=debug_viz
+        )
+        if len(receptacle_viewpoints) > 0:
+            viewpoints[handle] = receptacle_viewpoints
+            viewable_receptacles.append(receptacle)
+    return viewpoints, viewable_receptacles
 
 
 def cull_filtered_receptacles(

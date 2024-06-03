@@ -60,6 +60,16 @@ def quaternion_from_coeff(coeffs: List[float]) -> quaternion.quaternion:
     return quat
 
 
+def direction_to_quaternion(direction_vector: np.ndarray):
+    """
+    Convert a direction vector to a quaternion.
+    """
+    origin_vector = np.array([0, 0, -1])
+    output = quaternion_from_two_vectors(origin_vector, direction_vector)
+    output = output.normalized()
+    return output
+
+
 def quaternion_rotate_vector(
     quat: quaternion.quaternion, v: np.ndarray
 ) -> np.ndarray:

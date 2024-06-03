@@ -62,7 +62,6 @@ class ObjectTargetSampler(ObjectSampler):
 
         :return: None if failed. Otherwise a dict mapping object handles to new object instances in the sampled target location.
         """
-
         new_target_objects = {}
 
         logger.info(

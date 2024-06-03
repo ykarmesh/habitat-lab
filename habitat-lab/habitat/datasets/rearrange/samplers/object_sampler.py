@@ -11,6 +11,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
 import magnum as mn
+import numpy as np
 
 import habitat.sims.habitat_simulator.sim_utilities as sutils
 import habitat_sim
@@ -23,9 +24,11 @@ from habitat.datasets.rearrange.samplers.receptacle import (
     OnTopOfReceptacle,
     Receptacle,
     ReceptacleTracker,
+    TriangleMeshReceptacle,
     find_receptacles,
 )
 from habitat.sims.habitat_simulator.debug_visualizer import DebugVisualizer
+from habitat.tasks.rearrange.utils import get_aabb
 
 
 class ObjectSampler:
@@ -37,10 +40,12 @@ class ObjectSampler:
         self,
         object_set: List[str],
         allowed_recep_set_names: List[str],
-        num_objects: Tuple[int, int] = (1, 1),
+        sampler_range_type: str,
+        num_objects: Optional[Tuple[int, int]] = None,
         orientation_sample: Optional[str] = None,
         sample_region_ratio: Optional[Dict[str, float]] = None,
         nav_to_min_distance: float = -1.0,
+        object_set_sample_probs: Optional[Dict[str, float]] = None,
         recep_set_sample_probs: Optional[Dict[str, float]] = None,
         translation_up_offset: float = 0.08,
         constrain_to_largest_nav_island: bool = False,
@@ -48,16 +53,20 @@ class ObjectSampler:
         """
         :param object_set: The set objects from which placements will be sampled.
         :param allowed_recep_set_names:
+        :param sampler_range_type: The type of range for the sampler. Options are: "fixed", "dynamic".
         :param num_objects: The [minimum, maximum] number of objects for this sampler. Actual target value for the sampler will be uniform random number in this range.
         :param orientation_sample: Optionally choose to sample object orientation as well as position. Options are: None, "up" (1D), "all" (rand quat).
         :param sample_region_ratio: Defines a XZ scaling of the sample region around its center. Default no scaling. Enables shrinking aabb receptacles away from edges.
         :param nav_to_min_distance: -1.0 means there will be no accessibility constraint. Positive values indicate minimum distance from sampled object to a navigable point.
+        :param object_set_sample_probs: Optionally provide a non-uniform weighting for object sampling.
         :param recep_set_sample_probs: Optionally provide a non-uniform weighting for receptacle sampling.
         :param translation_up_offset: Optionally offset sample points to improve likelyhood of successful placement on inflated collision shapes.
         :param check_if_in_largest_island_id: Optionally check if the snapped point is in the largest island id
         """
         self.object_set = object_set
         self._allowed_recep_set_names = allowed_recep_set_names
+        self._sampler_range_type = sampler_range_type
+        self._object_set_sample_probs = object_set_sample_probs
         self._recep_set_sample_probs = recep_set_sample_probs
         self._translation_up_offset = translation_up_offset
         self._constrain_to_largest_nav_island = constrain_to_largest_nav_island
@@ -70,8 +79,23 @@ class ObjectSampler:
         ] = None  # the specific receptacle instances relevant to this sampler
         self.max_sample_attempts = 100  # number of distinct object|receptacle pairings to try before giving up
         self.max_placement_attempts = 50  # number of times to attempt a single object|receptacle placement pairing
-        self.num_objects = num_objects  # tuple of [min,max] objects to sample
-        assert self.num_objects[1] >= self.num_objects[0]
+
+        # type of sampler range: dynamic, fixed.
+        # - dynamic sets number of objects to sample based on total receptacle area
+        # - fixed sets number of objects to sample to the given range
+        if self._sampler_range_type == "dynamic":
+            self.num_objects = None
+        elif self._sampler_range_type == "fixed":
+            self.num_objects = (
+                num_objects  # tuple of [min,max] objects to sample
+            )
+            assert self.num_objects[1] >= self.num_objects[0]
+            self.set_num_samples()
+        else:
+            raise ValueError(
+                f"Sampler range type {self._sampler_range_type} not recognized."
+            )
+
         self.orientation_sample = (
             orientation_sample  # None, "up" (1D), "all" (rand quat)
         )
@@ -79,7 +103,7 @@ class ObjectSampler:
             sample_region_ratio = defaultdict(lambda: 1.0)
         self.sample_region_ratio = sample_region_ratio
         self.nav_to_min_distance = nav_to_min_distance
-        self.set_num_samples()
+
         # More possible parameters of note:
         # - surface vs volume
         # - apply physics stabilization: none, dynamic, projection
@@ -93,8 +117,24 @@ class ObjectSampler:
         self.receptacle_instances = None
         self.receptacle_candidates = None
         # number of objects in the range should be reset each time
-        self.set_num_samples()
+        if self._sampler_range_type == "dynamic":
+            self.num_objects = None
+        else:
+            self.set_num_samples()
         self.largest_island_id = -1
+
+    def set_receptacle_instances(self, receptacles: List[Receptacle]) -> None:
+        """
+        Set the receptacle instances to sample from.
+        """
+        self.receptacle_instances = receptacles
+        if self._sampler_range_type == "dynamic":
+            total_receptacle_area = sum(rec.total_area for rec in receptacles)
+            self.num_objects = (
+                int(np.floor(total_receptacle_area * 1.5)),
+                int(np.floor(total_receptacle_area * 2)),
+            )
+            self.set_num_samples()
 
     def sample_receptacle(
         self,
@@ -222,7 +262,13 @@ class ObjectSampler:
         """
         Sample an object handle from the object_set and return it.
         """
-        return self.object_set[random.randrange(0, len(self.object_set))]
+        if self._object_set_sample_probs is not None:
+            sample_weights = [
+                self._object_set_sample_probs[k] for k in self.object_set
+            ]
+            return random.choices(self.object_set, weights=sample_weights)[0]
+        else:
+            return self.object_set[random.randrange(0, len(self.object_set))]
 
     def sample_placement(
         self,
@@ -282,6 +328,17 @@ class ObjectSampler:
                     object_handle
                 )
 
+                # fail early if it's impossible to place the object
+                cumulative_bb = new_object.root_scene_node.cumulative_bb
+                new_object_base_area = (
+                    cumulative_bb.size_x() * cumulative_bb.size_z()
+                )
+                if new_object_base_area > receptacle.total_area:
+                    logger.info(
+                        f"Failed to sample placement. {object_handle} was too large to place on {receptacle.name}"
+                    )
+                    return None
+
             # try to place the object
             new_object.translation = target_object_position
             if self.orientation_sample is not None:
@@ -297,8 +354,13 @@ class ObjectSampler:
                         habitat_sim.utils.common.random_quaternion()
                     )
 
+            if isinstance(receptacle, TriangleMeshReceptacle):
+                new_object.translation = new_object.translation + mn.Vector3(
+                    0, 0.05, 0
+                )
             if isinstance(receptacle, OnTopOfReceptacle):
                 snap_down = False
+
             if snap_down:
                 support_object_ids = [habitat_sim.stage_id]
                 # add support object ids for non-stage receptacles
@@ -341,8 +403,27 @@ class ObjectSampler:
                         nav_island=self.largest_island_id,
                         target_object_id=new_object.object_id,
                     ):
-                        logger.info(
-                            "   - object is not accessible from navmesh, rejecting placement."
+                        logger.warning(
+                            f"Failed to navigate to {object_handle} on {receptacle.name} in {num_placement_tries} tries."
+                        )
+                        continue
+                    object_aabb = get_aabb(
+                        new_object.object_id, sim, transformed=True
+                    )
+                    object_corners = [
+                        object_aabb.back_bottom_left,
+                        object_aabb.back_bottom_right,
+                        object_aabb.front_bottom_left,
+                        object_aabb.front_bottom_right,
+                    ]
+                    if not all(
+                        receptacle.check_if_point_on_surface(
+                            sim, corner, threshold=0.1
+                        )
+                        for corner in object_corners
+                    ):
+                        logger.warning(
+                            f"Failed to place {object_handle} within bounds of {receptacle.name} in {num_placement_tries} tries."
                         )
                         continue
                     return new_object
@@ -360,7 +441,7 @@ class ObjectSampler:
                     nav_island=self.largest_island_id,
                     target_object_id=new_object.object_id,
                 ):
-                    logger.info(
+                    logger.warning(
                         "   - object is not accessible from navmesh, rejecting placement."
                     )
                     continue
