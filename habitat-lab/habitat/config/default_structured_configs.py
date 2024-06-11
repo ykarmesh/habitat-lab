@@ -1072,8 +1072,14 @@ class RotDistToGoalMeasurementConfig(MeasurementConfig):
 
 
 @dataclass
+class NavmeshCollisionMeasurementConfig(MeasurementConfig):
+    type: str = "NavmeshCollision"
+
+
+@dataclass
 class DistToGoalMeasurementConfig(MeasurementConfig):
     type: str = "DistToGoal"
+    use_shortest_path_cache: bool = True
 
 
 @dataclass
@@ -1089,7 +1095,7 @@ class NavToPosSuccMeasurementConfig(MeasurementConfig):
     Rearrangement Navigation task only. The value is 1.0 if the robot is within success_distance of the goal position.
     """
     type: str = "NavToPosSucc"
-    success_distance: float = 1.5
+    success_distance: float = 0.5
 
 
 @dataclass
@@ -1163,12 +1169,17 @@ class NavToObjRewardMeasurementConfig(MeasurementConfig):
     angle_dist_reward: float = 1.0
     dist_reward: float = 1.0
     constraint_violate_pen: float = 1.0
+    navmesh_violate_pen: float = (
+        0.0  # penalty for trying to move outside navmesh
+    )
     force_pen: float = 0.0001
     max_force_pen: float = 0.01
     force_end_pen: float = 1.0
     count_coll_pen: float = -1.0
     max_count_colls: int = -1
     count_coll_end_pen: float = 1.0
+    robot_collisions_pen: float = 0.0
+    robot_collisions_end_pen: float = 0.0
 
 
 @dataclass
@@ -1185,6 +1196,98 @@ class NavToObjSuccessMeasurementConfig(MeasurementConfig):
     must_call_stop: bool = True
     # distance in radians.
     success_angle_dist: float = 0.261799
+
+
+@dataclass
+class OVMMNavToObjRewardMeasurementConfig(NavToObjRewardMeasurementConfig):
+    type: str = "OVMMNavToObjReward"
+
+
+@dataclass
+class OVMMDistToPickGoalMeasurementConfig(DistToGoalMeasurementConfig):
+    type: str = "OVMMDistToPickGoal"
+
+
+@dataclass
+class OVMMDistToPlaceGoalMeasurementConfig(DistToGoalMeasurementConfig):
+    type: str = "OVMMDistToPlaceGoal"
+
+
+@dataclass
+class OVMMRotDistToGoalMeasurementConfig(RotDistToGoalMeasurementConfig):
+    type: str = "OVMMRotDistToGoal"
+
+
+@dataclass
+class OVMMRotDistToPickGoalMeasurementConfig(
+    OVMMRotDistToGoalMeasurementConfig
+):
+    type: str = "OVMMRotDistToPickGoal"
+
+
+@dataclass
+class OVMMRotDistToPlaceGoalMeasurementConfig(
+    OVMMRotDistToGoalMeasurementConfig
+):
+    type: str = "OVMMRotDistToPlaceGoal"
+
+
+@dataclass
+class OVMMNavToPickSuccMeasurementConfig(NavToPosSuccMeasurementConfig):
+    type: str = "OVMMNavToPickSucc"
+
+
+@dataclass
+class OVMMNavToObjSuccMeasurementConfig(NavToObjSuccessMeasurementConfig):
+    type: str = "OVMMNavToObjSucc"
+    min_object_coverage_iou: float = 1e-3
+
+
+@dataclass
+class OVMMNavOrientToPickSuccMeasurementConfig(
+    OVMMNavToObjSuccMeasurementConfig
+):
+    type: str = "OVMMNavOrientToPickSucc"
+
+
+@dataclass
+class OVMMNavToPlaceSuccMeasurementConfig(NavToPosSuccMeasurementConfig):
+    type: str = "OVMMNavToPlaceSucc"
+
+
+@dataclass
+class OVMMNavOrientToPlaceSuccMeasurementConfig(
+    OVMMNavToObjSuccMeasurementConfig
+):
+    type: str = "OVMMNavOrientToPlaceSucc"
+
+
+@dataclass
+class PickObjectIoUCoverageMeasurementConfig(MeasurementConfig):
+    type: str = "PickObjectIoUCoverage"
+
+
+@dataclass
+class PlaceObjectIoUCoverageMeasurementConfig(MeasurementConfig):
+    type: str = "PlaceObjectIoUCoverage"
+
+
+@dataclass
+class TargetIoUCoverageMeasurementConfig(MeasurementConfig):
+    type: str = "TargetIoUCoverage"
+    max_goal_dist: float = 0.1
+
+
+@dataclass
+class PickGoalIoUCoverageMeasurementConfig(TargetIoUCoverageMeasurementConfig):
+    type: str = "PickGoalIoUCoverage"
+
+
+@dataclass
+class PlaceGoalIoUCoverageMeasurementConfig(
+    TargetIoUCoverageMeasurementConfig
+):
+    type: str = "PlaceGoalIoUCoverage"
 
 
 @dataclass
@@ -1237,13 +1340,17 @@ class MoveObjectsRewardMeasurementConfig(MeasurementConfig):
     single_rearrange_reward: float = 1.0
     dist_reward: float = 1.0
     constraint_violate_pen: float = 10.0
+    navmesh_violate_pen: float = (
+        0.0  # penalty for trying to move outside navmesh
+    )
     force_pen: float = 0.001
     max_force_pen: float = 1.0
     force_end_pen: float = 10.0
     count_coll_pen: float = -1.0
     max_count_colls: int = -1
     count_coll_end_pen: float = 1.0
-
+    robot_collisions_pen: float = 0.0
+    robot_collisions_end_pen: float = 0.0
 
 @dataclass
 class RearrangePickRewardMeasurementConfig(MeasurementConfig):
@@ -1662,7 +1769,7 @@ class TaskConfig(HabitatBaseConfig):
     # Spawn parameters
     filter_colliding_states: bool = True
     num_spawn_attempts: int = 200
-    spawn_max_dist_to_obj: float = 2.0
+    spawn_max_dist_to_obj: float = 1.0
     base_angle_noise: float = 0.523599
     spawn_max_dist_to_obj_delta: float = 0.02
     # Factor to shrink the receptacle sampling volume when predicates place
@@ -2019,7 +2126,7 @@ class SimulatorConfig(HabitatBaseConfig):
     # merge_sim_episode_with_object_config
     ep_info: Optional[Any] = None
     # The offset added to object ids in the panoptic sensor
-    object_ids_start: int = 100
+    object_ids_start: int = 50
     # Configuration for rendering
     renderer: RendererConfig = RendererConfig()
 

@@ -10,6 +10,7 @@ import magnum as mn
 import numpy as np
 from gym import spaces
 
+import habitat_sim
 from habitat.articulated_agents.robots.spot_robot import SpotRobot
 from habitat.articulated_agents.robots.stretch_robot import StretchRobot
 from habitat.core.registry import registry
@@ -23,6 +24,7 @@ from habitat.tasks.rearrange.utils import (
     get_camera_object_angle,
     get_camera_transform,
 )
+from habitat.utils.geometry_utils import angle_between
 
 
 class GripSimulatorTaskAction(ArticulatedAgentAction):
@@ -37,6 +39,12 @@ class GripSimulatorTaskAction(ArticulatedAgentAction):
 
 @registry.register_task_action
 class MagicGraspAction(GripSimulatorTaskAction):
+    def __init__(self, *args, config, sim: RearrangeSim, **kwargs):
+        super().__init__(*args, config=config, sim=sim, **kwargs)
+        self._sim: RearrangeSim = sim
+        self._grasp_thresh_dist = config.grasp_thresh_dist
+        self._grasp_threshold = config.grasp_threshold
+
     @property
     def action_space(self):
         return spaces.Box(shape=(1,), high=1.0, low=-1.0)
@@ -57,7 +65,7 @@ class MagicGraspAction(GripSimulatorTaskAction):
 
             keep_T = mn.Matrix4.translation(mn.Vector3(0.1, 0.0, 0.0))
 
-            if to_target < self._config.grasp_thresh_dist:
+            if to_target < self._grasp_thresh_dist:
                 self.cur_grasp_mgr.snap_to_obj(
                     self._sim.scene_obj_ids[closest_obj_idx],
                     force=False,
@@ -78,20 +86,31 @@ class MagicGraspAction(GripSimulatorTaskAction):
 
             to_target = np.linalg.norm(ee_pos - pos[closest_idx], ord=2)
 
-            if to_target < self._config.grasp_thresh_dist:
+            if to_target < self._grasp_thresh_dist:
                 self.cur_articulated_agent.open_gripper()
                 self.cur_grasp_mgr.snap_to_marker(names[closest_idx])
 
     def _ungrasp(self):
+        if self.cur_grasp_mgr.snap_idx != -1:
+            rom = self._sim.get_rigid_object_manager()
+            ro = rom.get_object_by_id(self.cur_grasp_mgr.snap_idx)
+            ro.motion_type = habitat_sim.physics.MotionType.DYNAMIC
+            ro.collidable = True
         self.cur_grasp_mgr.desnap()
 
     def step(self, grip_action, should_step=True, *args, **kwargs):
         if grip_action is None:
             return
 
-        if grip_action >= 0 and not self.cur_grasp_mgr.is_grasped:
+        if (
+            grip_action >= self._grasp_threshold
+            and not self.cur_grasp_mgr.is_grasped
+        ):
             self._grasp()
-        elif grip_action < 0 and self.cur_grasp_mgr.is_grasped:
+        elif (
+            grip_action < self._grasp_threshold
+            and self.cur_grasp_mgr.is_grasped
+        ):
             self._ungrasp()
 
 
@@ -100,6 +119,7 @@ class SuctionGraspAction(MagicGraspAction):
     def __init__(self, *args, config, sim: RearrangeSim, **kwargs):
         super().__init__(*args, config=config, sim=sim, **kwargs)
         self._sim: RearrangeSim = sim
+        self._grasp_threshold = config.grasp_threshold
 
     def _grasp(self):
         attempt_snap_entity: Optional[Union[str, int]] = None
@@ -176,7 +196,7 @@ class SuctionGraspAction(MagicGraspAction):
 
 @registry.register_task_action
 class GazeGraspAction(MagicGraspAction):
-    def __init__(self, *args, config, sim, **kwargs):
+    def __init__(self, *args, config, sim, task, **kwargs):
         super().__init__(*args, config=config, sim=sim, **kwargs)
         self.min_dist, self.max_dist = config.gaze_distance_range
         self.center_cone_angle_threshold = np.deg2rad(
@@ -186,6 +206,17 @@ class GazeGraspAction(MagicGraspAction):
             config.center_cone_vector
         ).normalized()
         self.auto_grasp = config.auto_grasp
+
+        self._task = task
+        self._object_ids_start = sim.habitat_config.object_ids_start
+        self._grasp_thresh_dist = config.grasp_thresh_dist
+        self._wrong_grasp_should_end = config.wrong_grasp_should_end
+        self._distance_from = getattr(config, "gaze_distance_from", "camera")
+        self._gaze_use_xy_distance = config.gaze_use_xy_distance
+        self._gaze_distance_to_bbox = config.gaze_distance_to_bbox
+        self._center_square_width = config.gaze_center_square_width
+        self._grasp_threshold = config.grasp_threshold
+        self._oracle_snap = config.oracle_snap
 
     @property
     def action_space(self):
@@ -245,7 +276,7 @@ class GazeGraspAction(MagicGraspAction):
         # Note that panoptic_img is a 3D array
         center_obj_id = (
             panoptic_img[height // 2, width // 2, 0]
-            - self._sim.habitat_config.object_ids_start
+            - self._sim._object_ids_start
         )
 
         rom = self._sim.get_rigid_object_manager()
@@ -266,7 +297,74 @@ class GazeGraspAction(MagicGraspAction):
 
         return None, None
 
+    def _snap_closest_valid_object(self):
+        """Snaps closest valid object"""
+        sim_observations = self._sim._sensor_suite.get_observations(
+            self._sim.get_sensor_observations()
+        )
+        if isinstance(self._sim.robot, StretchRobot):
+            obj_seg = self._task.sensor_suite.get_observations(
+                observations=sim_observations,
+                episode=self._sim.ep_info,
+                task=self._task,
+            )["object_segmentation"]
+        else:
+            raise NotImplementedError(
+                "This robot dose not have GazeGraspAction."
+            )
+        allowed_scene_obj_ids = [
+            int(g.object_id) for g in self._sim.ep_info.candidate_objects
+        ]
+        ee_pos = self.cur_robot.ee_transform.translation
+        ee_to_objects =self._sim.get_scene_pos()[allowed_scene_obj_ids] - ee_pos
+        if self._gaze_use_xy_distance:
+            ee_to_objects = ee_to_objects[:, [0, 2]]
+        distances = np.linalg.norm(ee_to_objects, axis=1)
+        closest_ids = np.argsort(distances)
+
+        if self._gaze_distance_to_bbox:
+            distance_to_bbox = np.inf
+            for index in closest_ids:
+                BBOX_SIZE_LIMIT = 1.0
+                # check distance to bbox only for close objects
+                if distances[index] > BBOX_SIZE_LIMIT + self._grasp_thresh_dist:
+                    return
+                rom = self._sim.get_rigid_object_manager()
+                rigid_obj_mgr = self._sim.get_rigid_object_manager()
+                object_idx = np.array(self._sim.scene_obj_ids)[
+                    allowed_scene_obj_ids
+                ][index]
+                obj = rigid_obj_mgr.get_object_by_id(object_idx)
+                center = np.array(obj.translation)
+                sizes = np.array(obj.root_scene_node.cumulative_bb.size())
+                rotation = obj.rotation
+                object_obb = habitat_sim.geo.OBB(center, sizes, rotation)
+                distance_to_bbox = object_obb.distance(ee_pos)
+                if distance_to_bbox <= self._grasp_thresh_dist:
+                    closest = index
+                    break
+
+            if distance_to_bbox > self._grasp_thresh_dist:
+                return
+
+        else:
+            closest = closest_ids[0]
+            if distances[closest] > self._grasp_thresh_dist:
+                return
+
+        snap_obj_idx = np.array(self._sim.scene_obj_ids)[
+            allowed_scene_obj_ids
+        ][closest]
+        self._task._picked_object_idx = self._sim.scene_obj_ids.index(
+            snap_obj_idx
+        )
+        if np.sum(obj_seg) > 0:
+            self.cur_grasp_mgr.snap_to_obj(snap_obj_idx, force=True)
+
     def _grasp(self):
+        if self._oracle_snap:
+            self._snap_closest_valid_object()
+            return
         # Check if the object is in the center of the camera
         center_obj_idx, center_obj_pos = self._determine_center_object()
 
@@ -282,9 +380,18 @@ class GazeGraspAction(MagicGraspAction):
             rel_pos=mn.Vector3(0.1, 0.0, 0.0),
             keep_T=keep_T,
         )
+
+        self._task._picked_object_idx = self._sim.scene_obj_ids.index(
+            center_obj_idx
+        )
         return
 
     def _ungrasp(self):
+        if self.cur_grasp_mgr.snap_idx != -1:
+            rom = self._sim.get_rigid_object_manager()
+            ro = rom.get_object_by_id(self.cur_grasp_mgr.snap_idx)
+            ro.motion_type = habitat_sim.physics.MotionType.DYNAMIC
+            ro.collidable = True
         self.cur_grasp_mgr.desnap()
 
     def step(self, grip_action, should_step=True, *args, **kwargs):
@@ -295,7 +402,13 @@ class GazeGraspAction(MagicGraspAction):
         if grip_action is None:
             return
 
-        if grip_action >= 0 and not self.cur_grasp_mgr.is_grasped:
+        if (
+            grip_action >= self._grasp_threshold
+            and not self.cur_grasp_mgr.is_grasped
+        ):
             self._grasp()
-        elif grip_action < 0 and self.cur_grasp_mgr.is_grasped:
+        elif (
+            grip_action < self._grasp_threshold
+            and self.cur_grasp_mgr.is_grasped
+        ):
             self._ungrasp()

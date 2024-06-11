@@ -6,6 +6,7 @@
 
 import os
 import os.path as osp
+import pickle
 import time
 from collections import defaultdict
 from typing import (
@@ -115,6 +116,8 @@ class RearrangeSim(HabitatSim):
         self._viz_objs: Dict[str, Any] = {}
         self._draw_bb_objs: List[int] = []
 
+        self._obj_orig_motion_types: Dict[str, MotionType] = {}
+
         self.agents_mgr = ArticulatedAgentManager(self.habitat_config, self)
 
         # Setup config options.
@@ -133,6 +136,7 @@ class RearrangeSim(HabitatSim):
             self.habitat_config.update_articulated_agent
         )
         self._step_physics = self.habitat_config.step_physics
+        self._enable_physics = self.habitat_config.habitat_sim_v0.enable_physics
         self._auto_sleep = self.habitat_config.auto_sleep
         self._load_objs = self.habitat_config.load_objs
         self._additional_object_paths = (
@@ -146,6 +150,12 @@ class RearrangeSim(HabitatSim):
         self._should_setup_semantic_ids = (
             self.habitat_config.should_setup_semantic_ids
         )
+        # TODO: remove assert
+        assert self._should_setup_semantic_ids is True
+
+        self._sleep_dist = self.habitat_config.sleep_dist
+        self._object_ids_start = self.habitat_config.object_ids_start
+
 
     def enable_perf_logging(self):
         """
@@ -223,6 +233,23 @@ class RearrangeSim(HabitatSim):
     def _try_acquire_context(self):
         if self.renderer and self._concur_render:
             self.renderer.acquire_gl_context()
+
+    @add_perf_timing_func()
+    def _auto_sleep(self):
+        all_robo_pos = [
+            robot.base_pos for robot in self.robots_mgr.robots_iter
+        ]
+        rom = self.get_rigid_object_manager()
+        for handle, ro in rom.get_objects_by_handle_substring().items():
+            is_far = all(
+                (robo_pos - ro.translation).length() > self._sleep_dist
+                for robo_pos in all_robo_pos
+            )
+            if is_far and ro.motion_type != MotionType.STATIC:
+                self._obj_orig_motion_types[handle] = ro.motion_type
+                ro.motion_type = habitat_sim.physics.MotionType.STATIC
+            elif not is_far:
+                ro.motion_type = self._obj_orig_motion_types[handle]
 
     @add_perf_timing_func()
     def _sleep_all_objects(self):
@@ -346,6 +373,9 @@ class RearrangeSim(HabitatSim):
 
         if new_scene:
             self._load_navmesh(ep_info)
+            receptacles = find_receptacles(self)
+            breakpoint()
+            self._receptacles = {r.unique_name: r for r in receptacles}
 
         # Get the starting positions of the target objects.
         scene_pos = self.get_scene_pos()
@@ -385,7 +415,7 @@ class RearrangeSim(HabitatSim):
             obj = rom.get_object_by_handle(handle)
             for node in obj.visual_scene_nodes:
                 node.semantic_id = (
-                    obj.object_id + self.habitat_config.object_ids_start
+                    obj.object_id + self._object_ids_start
                 )
 
     def get_agent_data(self, agent_idx: Optional[int]) -> ArticulatedAgentData:
@@ -430,7 +460,7 @@ class RearrangeSim(HabitatSim):
             articulated_agent.base_rot = start_rot
             self.perform_discrete_collision_detection()
             did_collide, _ = rearrange_collision(
-                self, True, ignore_base=False, agent_idx=agent_idx
+                self, True, ignore_base=True, agent_idx=agent_idx
             )
             if not did_collide:
                 break
@@ -599,9 +629,15 @@ class RearrangeSim(HabitatSim):
             t_start = time.time()
             if should_add_objects:
                 # Get object path
-                object_template = otm.get_templates_by_handle_substring(
-                    obj_handle
-                )
+                # object_template = otm.get_templates_by_handle_substring(
+                #     obj_handle
+                # )
+                # breakpoint()
+                object_template = None
+                for obj_path in self._additional_object_paths:
+                    object_template = osp.join(obj_path, obj_handle)
+                    if osp.isfile(object_template):
+                        break
 
                 # Exit if template is invalid
                 if not object_template:
@@ -610,7 +646,7 @@ class RearrangeSim(HabitatSim):
                     )
 
                 # Get object path
-                object_path = list(object_template.keys())[0]
+                object_path = object_template #list(object_template.keys())[0]
 
                 # Get rigid object from the path
                 ro = rom.add_object_by_template_handle(object_path)
@@ -872,6 +908,13 @@ class RearrangeSim(HabitatSim):
             self.viz_ids = defaultdict(lambda: None)
 
         self.maybe_update_articulated_agent()
+
+        if (
+            self._sleep_dist > 0.0
+            and self._enable_physics
+            and not self._kinematic_mode
+        ):
+            self._auto_sleep()
 
         if self._batch_render:
             for _ in range(self.ac_freq_ratio):

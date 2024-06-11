@@ -25,6 +25,15 @@ def angle_between_quaternions(
     return 2 * np.arctan2(np.linalg.norm(dq[1:]), np.abs(dq[0]))
 
 
+def _quat_to_xy_heading(quat):
+    direction_vector = np.array([0, 0, -1])
+
+    heading_vector = quaternion_rotate_vector(quat, direction_vector)
+
+    phi = cartesian_to_polar(-heading_vector[2], heading_vector[0])[1]
+    return np.array([phi], dtype=np.float32)
+
+
 def quaternion_from_two_vectors(
     v0: np.ndarray, v1: np.ndarray
 ) -> quaternion.quaternion:
@@ -126,6 +135,13 @@ def agent_state_target2ref(
     )
 
     return (rotation_in_ref_coordinate, position_in_ref_coordinate)
+
+def cosine(v1, v2):
+    return np.clip(np.dot(v1, v2), -1.0, 1.0)
+
+
+def angle_between(v1, v2):
+    return np.arccos(cosine(v1, v2))
 
 
 def random_triangle_point(
