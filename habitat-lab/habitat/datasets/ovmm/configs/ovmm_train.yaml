@@ -1680,6 +1680,8 @@ receptacle_sets:
       - ""
     excluded_receptacle_substrings: []
     receptacle_category_mapping_file: "data/objects/fpmodels-with-decomposed.csv"
+    include_receptacle_categories: []
+    exclude_receptacle_categories: []
 
 scene_sampler:
   type: subset
@@ -1792,7 +1794,7 @@ object_target_samplers:
     - hab2
     num_samples:
     - 2
-    - 10
+    - 5
     orientation_sampling: up
     nav_to_min_distance: 1.5
 
@@ -1804,7 +1806,6 @@ agent_height: 1.41
 agent_max_climb: 0.01
 
 check_navigable: True
-navmesh_offset: [[0.0, 0.0], [0.25, 0.0], [-0.25, 0.0]]
 max_collision_rate_for_navigable: 0.8
 angle_threshold: 0.05
 angular_velocity: 1.0

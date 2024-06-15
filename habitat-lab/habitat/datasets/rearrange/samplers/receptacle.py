@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import corrade as cr
 import magnum as mn
 import numpy as np
+import pandas as pd
 import trimesh
 from tqdm import tqdm
 
@@ -1023,6 +1024,7 @@ def find_receptacles(
     sim: habitat_sim.Simulator,
     ignore_handles: Optional[List[str]] = None,
     exclude_filter_strings: Optional[List[str]] = None,
+    selected_category_receptacles: Optional[List[str]] = None,
 ) -> List[Union[Receptacle, AABBReceptacle, TriangleMeshReceptacle]]:
     """
     Scrape and return a list of all Receptacles defined in the metadata belonging to the scene's currently instanced objects.
@@ -1030,6 +1032,7 @@ def find_receptacles(
     :param sim: Simulator must be provided.
     :param ignore_handles: An optional list of handles for ManagedObjects which should be skipped. No Receptacles for matching objects will be returned.
     :param exclude_filter_strings: An optional list of excluded Receptacle substrings. Any Receptacle which contains any excluded filter substring in its unique_name will not be included in the returned set.
+    :param selected_category_receptacles: An optional list of valid Receptacle categories. If provided, only Receptacles with a unique_name containing one of the valid substrings will be included in the returned set.
     """
 
     obj_mgr = sim.get_rigid_object_manager()
@@ -1105,6 +1108,19 @@ def find_receptacles(
                 rec1_unique_name != receptacles[rec_ix2].unique_name
             ), "Two Receptacles found with the same unique name '{rec1_unique_name}'. Likely indicates multiple receptacle entries with the same name in the same config."
 
+    # check if receptacles are in the selected_category_receptacles list
+    if selected_category_receptacles is not None:
+        valid_receptacles = []
+        for receptacle in receptacles:
+            for selected_category_set in selected_category_receptacles.values():
+                for selected_category in selected_category_set:
+                    if selected_category in receptacle.unique_name:
+                        valid_receptacles.append(receptacle)
+                        break
+        logger.info(
+            f"Found {len(valid_receptacles)} receptacles with selected categories from {len(receptacles)} total."
+        )
+        receptacles = valid_receptacles
     return receptacles
 
 
@@ -1115,6 +1131,9 @@ class ReceptacleSet:
     excluded_object_substrings: List[str]
     included_receptacle_substrings: List[str]
     excluded_receptacle_substrings: List[str]
+    receptacle_category_mapping_file: Optional[str] = None
+    include_receptacle_categories: Optional[List[str]] = None
+    exclude_receptacle_categories: Optional[List[str]] = None
     is_on_top_of_sampler: bool = False
     comment: str = ""
 
@@ -1198,6 +1217,41 @@ def get_recs_from_filter_file(
             for filtered_unique_name in filter_json[filter_type]:
                 filtered_unique_names.append(filtered_unique_name)
     return list(set(filtered_unique_names))
+
+
+def load_receptacle_category_mapping_file(
+    rec_filter_filepath: str,
+    include_receptacle_categories: Optional[List[str]] = None,
+    exclude_receptacle_categories: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    Load Receptacle category mapping file to generate a dictionary of Receptacle.unique_names to their category.
+
+    """
+    df = pd.read_csv(rec_filter_filepath)
+    name_key = "id" if "id" in df else "name"
+    category_key = (
+        "main_category" if "main_category" in df else "clean_category"
+    )
+
+    df = df[df["hasReceptacles"] == True]
+
+    df["category"] = (
+        df[category_key]
+        .fillna("")
+        .apply(lambda x: x.replace(" ", "_").split(".")[0])
+    )
+    recep_cat_mapping = dict(zip(df[name_key], df["category"]))
+    if len(include_receptacle_categories) > 0:
+        recep_cat_mapping = {
+            k: v for k, v in recep_cat_mapping.items() if v in include_receptacle_categories
+        }
+
+    if len(exclude_receptacle_categories) > 0:
+        recep_cat_mapping = {
+            k: v for k, v in recep_cat_mapping.items() if v not in exclude_receptacle_categories
+        }
+    return recep_cat_mapping
 
 
 class ReceptacleTracker:

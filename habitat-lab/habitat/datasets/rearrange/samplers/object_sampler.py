@@ -49,6 +49,7 @@ class ObjectSampler:
         recep_set_sample_probs: Optional[Dict[str, float]] = None,
         translation_up_offset: float = 0.08,
         constrain_to_largest_nav_island: bool = False,
+        selected_receptacle_category_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         :param object_set: The set objects from which placements will be sampled.
@@ -62,6 +63,7 @@ class ObjectSampler:
         :param recep_set_sample_probs: Optionally provide a non-uniform weighting for receptacle sampling.
         :param translation_up_offset: Optionally offset sample points to improve likelyhood of successful placement on inflated collision shapes.
         :param check_if_in_largest_island_id: Optionally check if the snapped point is in the largest island id
+        :param selected_receptacle_category_mapping: Optionally provide a mapping of object handles to receptacle categories.
         """
         self.object_set = object_set
         self._allowed_recep_set_names = allowed_recep_set_names
@@ -70,6 +72,7 @@ class ObjectSampler:
         self._recep_set_sample_probs = recep_set_sample_probs
         self._translation_up_offset = translation_up_offset
         self._constrain_to_largest_nav_island = constrain_to_largest_nav_island
+        self._selected_receptacle_category_mapping = selected_receptacle_category_mapping
 
         self.receptacle_instances: Optional[
             List[Receptacle]
@@ -162,6 +165,11 @@ class ObjectSampler:
         match_recep_sets = [
             recep_tracker.recep_sets[k] for k in self._allowed_recep_set_names
         ]
+        if self._selected_receptacle_category_mapping is not None:
+            match_categories = [
+                self._selected_receptacle_category_mapping[k]
+                for k in self._allowed_recep_set_names
+            ]
 
         if self._recep_set_sample_probs is not None:
             sample_weights = [
@@ -183,7 +191,7 @@ class ObjectSampler:
             self.receptacle_candidates = []
             for receptacle in self.receptacle_instances:
                 found_match = False
-                for receptacle_set in match_recep_sets:
+                for i, receptacle_set in enumerate(match_recep_sets):
                     culled = False
                     # first try to cull by exclusion
                     for ex_object_substr in (
@@ -199,6 +207,11 @@ class ObjectSampler:
                         if ex_receptacle_substr in receptacle.unique_name:
                             culled = True
                             break
+
+                    recep_cat = receptacle.parent_object_handle.split(":")[0][:-1]
+                    if (self._selected_receptacle_category_mapping is not None) and (recep_cat not in match_categories[i]):
+                        culled = True
+
                     if culled:
                         break
 

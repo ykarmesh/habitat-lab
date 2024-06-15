@@ -42,6 +42,7 @@ from habitat.datasets.rearrange.samplers.receptacle import (
     find_receptacles,
     get_navigable_receptacles,
     get_receptacle_viewpoints,
+    load_receptacle_category_mapping_file,
 )
 from habitat.datasets.rearrange.viewpoints import populate_semantic_graph
 from habitat.sims.habitat_simulator.debug_visualizer import DebugVisualizer
@@ -128,6 +129,7 @@ class RearrangeEpisodeGenerator:
         # Setup the sampler caches from config
         self._get_resource_sets()
         self._get_scene_sampler(num_episodes)
+        self._get_selected_receptacles_categories()
         self._get_obj_samplers()
         self._get_ao_state_samplers()
 
@@ -292,6 +294,7 @@ class RearrangeEpisodeGenerator:
                     constrain_to_largest_nav_island=obj_sampler_info[
                         "params"
                     ].get("constrain_to_largest_nav_island", False),
+                    selected_receptacle_category_mapping=self._selected_receptacle_category_mapping,
                 )
             else:
                 logger.info(
@@ -343,6 +346,7 @@ class RearrangeEpisodeGenerator:
                     constrain_to_largest_nav_island=target_sampler_info[
                         "params"
                     ].get("constrain_to_largest_nav_island", False),
+                    selected_receptacle_category_mapping=self._selected_receptacle_category_mapping,
                 )
             else:
                 logger.info(
@@ -466,6 +470,22 @@ class RearrangeEpisodeGenerator:
                 )
                 raise (NotImplementedError)
 
+    def _get_selected_receptacles_categories(self) -> None:
+        """
+        Load and cache the valid receptacle categories for the current scene.
+        """
+        self._selected_receptacle_category_mapping: Dict[str, str] = {}
+
+        for recep_set_name, recep_set in self._receptacle_sets.items():
+            recep_cat_mapping_file = recep_set.receptacle_category_mapping_file
+            if recep_cat_mapping_file is not None:
+                self._selected_receptacle_category_mapping[recep_set_name] = load_receptacle_category_mapping_file(
+                    recep_cat_mapping_file,
+                    recep_set.include_receptacle_categories,
+                    recep_set.exclude_receptacle_categories,
+                )
+
+
     def _reset_samplers(self) -> None:
         """
         Reset any sampler internal state related to a specific scene or episode.
@@ -490,7 +510,10 @@ class RearrangeEpisodeGenerator:
         Generate a debug line representation for each receptacle in the scene, aim the camera at it and record 1 observation.
         """
         logger.info("visualize_scene_receptacles processing")
-        receptacles = find_receptacles(self.sim)
+        receptacles = find_receptacles(
+            self.sim,
+            selected_category_receptacles=self._selected_receptacle_category_mapping,
+        )
         for receptacle in receptacles:
             logger.info("receptacle processing")
             receptacle.debug_draw(self.sim)
@@ -568,8 +591,6 @@ class RearrangeEpisodeGenerator:
         navmesh_path = osp.join(
             scene_base_dir,
             "navmeshes",
-            scenes_dir,
-            self.cfg.agent_name,
             scene_name + ".navmesh",
         )
 
@@ -595,6 +616,8 @@ class RearrangeEpisodeGenerator:
                 self.sim.pathfinder,
                 navmesh_settings,
             )
+            os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
+            self.sim.pathfinder.save_nav_mesh(navmesh_path)
         compute_navmesh_island_classifications(self.sim)
 
         # prepare target samplers
@@ -1244,7 +1267,10 @@ class RearrangeEpisodeGenerator:
         ):
             with open(receptacle_cache_path, "rb") as f:
                 _, viewable_receptacle_names = pickle.load(f)
-            receptacles = find_receptacles(self.sim)
+            receptacles = find_receptacles(
+                self.sim,
+                selected_category_receptacles=self._selected_receptacle_category_mapping
+            )
             viewable_receptacles = [
                 rec
                 for rec in receptacles
@@ -1254,7 +1280,10 @@ class RearrangeEpisodeGenerator:
                 f"{len(viewable_receptacles)} viewable receptacles found in cache."
             )
         else:
-            receptacles = find_receptacles(self.sim)
+            receptacles = find_receptacles(
+                self.sim,
+                selected_category_receptacles=self._selected_receptacle_category_mapping
+            )
             nav_island = get_largest_island_index(
                 self.sim.pathfinder, self.sim, allow_outdoor=False
             )
