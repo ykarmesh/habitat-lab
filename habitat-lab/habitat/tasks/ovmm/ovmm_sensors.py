@@ -74,7 +74,7 @@ class ObjectCategorySensor(Sensor):
     ) -> Optional[np.ndarray]:
         category_name = getattr(episode, self._category_attribute)
         return np.array(
-            [getattr(self._dataset, self._name_to_id_mapping)[category_name]],
+            [getattr(self._dataset, self._name_to_id_mapping)[cat_name] for cat_name in category_name],
             dtype=np.int64,
         )
 
@@ -113,7 +113,9 @@ class ObjectEmbeddingSensor(Sensor):
 
     def get_observation(self, observations, *args, episode, **kwargs):
         category_name = episode.object_category
-        return self._embeddings[category_name]
+        return np.array(
+            [self._embeddings[cat_name] for cat_name in category_name]
+        )
 
 
 @registry.register_sensor

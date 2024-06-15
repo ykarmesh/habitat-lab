@@ -878,13 +878,13 @@ class ManipulationModeAction(ArticulatedAgentAction):
     def step(self, task, *args, is_last_action, **kwargs):
         manip_mode = kwargs.get("manipulation_mode", [-1.0])
         if manip_mode[0] > self._threshold and not task._in_manip_mode:
-            if isinstance(self._sim.robot, StretchRobot):
+            if isinstance(self._sim.articulated_agent, StretchRobot):
                 # Turn the head to face the arm
                 task._in_manip_mode = True
-                self._sim.robot.arm_motor_pos = StretchJointStates.PRE_GRASP
-                self._sim.robot.arm_joint_pos = StretchJointStates.PRE_GRASP
+                self._sim.articulated_agent.arm_motor_pos = StretchJointStates.PRE_GRASP
+                self._sim.articulated_agent.arm_joint_pos = StretchJointStates.PRE_GRASP
                 # now turn the robot's base left by 90 degrees
-                obj_trans = self.cur_robot.sim_obj.transformation
+                obj_trans = self.cur_articulated_agent.sim_obj.transformation
                 turn_angle = np.pi / 2  # Turn left by 90 degrees
                 rot_quat = mn.Quaternion(
                     mn.Vector3(0, np.sin(turn_angle / 2), 0),
@@ -896,7 +896,7 @@ class ManipulationModeAction(ArticulatedAgentAction):
                     target_rot,
                     obj_trans.translation,
                 )
-                self.cur_robot.sim_obj.transformation = target_trans
+                self.cur_articulated_agent.sim_obj.transformation = target_trans
                 if self.cur_grasp_mgr.snap_idx is not None:
                     # Holding onto an object, also kinematically update the object.
                     self.cur_grasp_mgr.update_object_to_grasp()
@@ -992,39 +992,39 @@ class BaseWaypointTeleportAction(ArticulatedAgentAction):
             }
         )
 
-    def _capture_robot_state(self):
+    def _capture_articulated_agent_state(self):
         return {
-            "forces": self.cur_robot.sim_obj.joint_forces,
-            "vel": self.cur_robot.sim_obj.joint_velocities,
-            "pos": self.cur_robot.sim_obj.joint_positions,
+            "forces": self.cur_articulated_agent.sim_obj.joint_forces,
+            "vel": self.cur_articulated_agent.sim_obj.joint_velocities,
+            "pos": self.cur_articulated_agent.sim_obj.joint_positions,
         }
 
-    def _set_robot_state(self, set_dat):
+    def _set_articulated_agent_state(self, set_dat):
         """
         Keep track of robot's basic info
         """
-        self.cur_robot.sim_obj.joint_positions = set_dat["forces"]
-        self.cur_robot.sim_obj.joint_velocities = set_dat["vel"]
-        self.cur_robot.sim_obj.joint_forces = set_dat["pos"]
+        self.cur_articulated_agent.sim_obj.joint_positions = set_dat["forces"]
+        self.cur_articulated_agent.sim_obj.joint_velocities = set_dat["vel"]
+        self.cur_articulated_agent.sim_obj.joint_forces = set_dat["pos"]
 
     def update_base(self, target_rigid_state):
         """
         Update the robot base
         """
 
-        trans = self.cur_robot.sim_obj.transformation
+        trans = self.cur_articulated_agent.sim_obj.transformation
 
         target_trans = mn.Matrix4.from_(
             target_rigid_state.rotation.to_matrix(),
             target_rigid_state.translation,
         )
-        self.cur_robot.sim_obj.transformation = target_trans
+        self.cur_articulated_agent.sim_obj.transformation = target_trans
         # Check if there is a collision
         navmesh_violation, new_target_trans = self.collision_check(
             trans, target_trans
         )
         # Update the base
-        self.cur_robot.sim_obj.transformation = new_target_trans
+        self.cur_articulated_agent.sim_obj.transformation = new_target_trans
         if self.cur_grasp_mgr.snap_idx is not None:
             # Holding onto an object, also kinematically update the object.
             self.cur_grasp_mgr.update_object_to_grasp()
@@ -1073,8 +1073,8 @@ class BaseWaypointTeleportAction(ArticulatedAgentAction):
             lin_pos_x = np.maximum(lin_pos_x, 0)
 
         # Get the transformation of the robot
-        base_trans = self._sim.robot.base_transformation
-        obj_trans = self.cur_robot.sim_obj.transformation
+        base_trans = self._sim.articulated_agent.base_transformation
+        obj_trans = self.cur_articulated_agent.sim_obj.transformation
         # Get the global pos from the local target waypoints
         target_pos = base_trans.transform_point(
             mn.Vector3([lin_pos_x, lin_pos_z, 0])

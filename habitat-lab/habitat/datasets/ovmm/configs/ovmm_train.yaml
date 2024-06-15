@@ -1672,14 +1672,14 @@ object_sets:
     excluded_substrings: []
 
 receptacle_sets:
-  -
-    name: "hab2"
+  - name: "hab2"
     included_object_substrings:
       - ""
     excluded_object_substrings: []
     included_receptacle_substrings:
       - ""
     excluded_receptacle_substrings: []
+    receptacle_category_mapping_file: "data/objects/fpmodels-with-decomposed.csv"
 
 scene_sampler:
   type: subset

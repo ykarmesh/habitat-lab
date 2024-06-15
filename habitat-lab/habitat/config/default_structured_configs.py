@@ -2050,7 +2050,7 @@ class HabitatSimV0Config(HabitatBaseConfig):
     allow_sliding: bool = True
     frustum_culling: bool = True
     enable_physics: bool = False
-    enable_hbao: bool = False
+    enable_hbao: bool = True
     physics_config_file: str = "./data/default.physics_config.json"
     # Possibly unstable optimization for extra performance
     # with concurrent rendering
@@ -2097,7 +2097,7 @@ class SimulatorConfig(HabitatBaseConfig):
     should_setup_semantic_ids: bool = True
     # If in render mode a visualization of the rearrangement goal position
     # should also be displayed
-    debug_render_goal: bool = True
+    debug_render_goal: bool = False
     robot_joint_start_noise: float = 0.0
     # Rearrange agent setup
     ctrl_freq: float = 120.0

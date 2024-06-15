@@ -134,6 +134,9 @@ class ObjectSampler:
                 int(np.floor(total_receptacle_area * 1.5)),
                 int(np.floor(total_receptacle_area * 2)),
             )
+            logger.info(
+                f"Total receptacle area: {total_receptacle_area} m, setting num objects to {self.num_objects} based on area."
+            )
             self.set_num_samples()
 
     def sample_receptacle(
@@ -539,11 +542,12 @@ class ObjectSampler:
             object_idx_to_recep = {}
 
         logger.info(
-            f"    Trying to sample {self.target_objects_number} from range {self.num_objects}"
+            f"    Trying to sample {self.target_objects_number} objects from range {self.num_objects} of possible objects"
         )
 
         sampling_start_time = time.time()
         pairing_start_time = sampling_start_time
+
         while (
             len(new_objects) < self.target_objects_number
             and num_pairing_tries < self.max_sample_attempts
@@ -569,6 +573,7 @@ class ObjectSampler:
                 # This receptacle has already been counted in the receptacle
                 # tracking so don't double count.
             else:
+                # now follow the object_idx_to_recep mapping if it exists
                 new_object, receptacle = self.single_sample(
                     sim,
                     recep_tracker,

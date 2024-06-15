@@ -374,7 +374,6 @@ class RearrangeSim(HabitatSim):
         if new_scene:
             self._load_navmesh(ep_info)
             receptacles = find_receptacles(self)
-            breakpoint()
             self._receptacles = {r.unique_name: r for r in receptacles}
 
         # Get the starting positions of the target objects.

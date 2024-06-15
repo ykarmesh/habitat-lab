@@ -14,6 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 import habitat_sim
+from habitat.core.logging import logger
 from habitat.core.utils import DatasetFloatJSONEncoder
 from habitat.datasets.ovmm.navmesh_utils import (
     compute_navmesh_island_classifications,
@@ -616,6 +617,7 @@ if __name__ == "__main__":
             source_data_dir, split, f"{source_episodes_tag}.json.gz"
         )
         if not osp.exists(episodes_file):
+            logger.warning(f"Skipping {episodes_file} as it does not exist")
             continue
         episodes = add_cat_fields_to_episodes(
             episodes_file,

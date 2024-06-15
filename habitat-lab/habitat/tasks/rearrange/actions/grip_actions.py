@@ -91,11 +91,6 @@ class MagicGraspAction(GripSimulatorTaskAction):
                 self.cur_grasp_mgr.snap_to_marker(names[closest_idx])
 
     def _ungrasp(self):
-        if self.cur_grasp_mgr.snap_idx != -1:
-            rom = self._sim.get_rigid_object_manager()
-            ro = rom.get_object_by_id(self.cur_grasp_mgr.snap_idx)
-            ro.motion_type = habitat_sim.physics.MotionType.DYNAMIC
-            ro.collidable = True
         self.cur_grasp_mgr.desnap()
 
     def step(self, grip_action, should_step=True, *args, **kwargs):
@@ -302,7 +297,7 @@ class GazeGraspAction(MagicGraspAction):
         sim_observations = self._sim._sensor_suite.get_observations(
             self._sim.get_sensor_observations()
         )
-        if isinstance(self._sim.robot, StretchRobot):
+        if isinstance(self._sim.articulated_agent, StretchRobot):
             obj_seg = self._task.sensor_suite.get_observations(
                 observations=sim_observations,
                 episode=self._sim.ep_info,
@@ -315,7 +310,7 @@ class GazeGraspAction(MagicGraspAction):
         allowed_scene_obj_ids = [
             int(g.object_id) for g in self._sim.ep_info.candidate_objects
         ]
-        ee_pos = self.cur_robot.ee_transform.translation
+        ee_pos = self.cur_articulated_agent.ee_transform.translation
         ee_to_objects =self._sim.get_scene_pos()[allowed_scene_obj_ids] - ee_pos
         if self._gaze_use_xy_distance:
             ee_to_objects = ee_to_objects[:, [0, 2]]
@@ -387,11 +382,6 @@ class GazeGraspAction(MagicGraspAction):
         return
 
     def _ungrasp(self):
-        if self.cur_grasp_mgr.snap_idx != -1:
-            rom = self._sim.get_rigid_object_manager()
-            ro = rom.get_object_by_id(self.cur_grasp_mgr.snap_idx)
-            ro.motion_type = habitat_sim.physics.MotionType.DYNAMIC
-            ro.collidable = True
         self.cur_grasp_mgr.desnap()
 
     def step(self, grip_action, should_step=True, *args, **kwargs):
