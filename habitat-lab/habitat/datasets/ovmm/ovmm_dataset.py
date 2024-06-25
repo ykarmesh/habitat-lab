@@ -98,6 +98,7 @@ class OVMMDatasetV0(PointNavDatasetV1):
     r"""Class inherited from PointNavDataset that loads Object Rearrangement dataset."""
     obj_category_to_obj_category_id: Dict[str, int]
     recep_category_to_recep_category_id: Dict[str, int]
+    other_obj_category_to_other_obj_category_id: Dict[str, int]
     episodes: List[OVMMEpisode] = []  # type: ignore
     viewpoints_matrix: np.ndarray = None
     transformations_matrix: np.ndarray = None
@@ -162,6 +163,10 @@ class OVMMDatasetV0(PointNavDatasetV1):
         if "recep_category_to_recep_category_id" in deserialized:
             self.recep_category_to_recep_category_id = deserialized[
                 "recep_category_to_recep_category_id"
+            ]
+        if "other_obj_category_to_other_obj_category_id" in deserialized:
+            self.other_obj_category_to_other_obj_category_id = deserialized[
+                "other_obj_category_to_other_obj_category_id"
             ]
 
         all_episodes = deserialized["episodes"]

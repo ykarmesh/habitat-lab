@@ -21,6 +21,7 @@ from habitat.tasks.ovmm.sub_tasks.nav_to_obj_sensors import (
     TargetIoUCoverage,
 )
 from habitat.tasks.ovmm.sub_tasks.place_sensors import OVMMPlaceSuccess
+from habitat.tasks.rearrange.rearrange_sensors import NumStepsMeasure
 from habitat.tasks.rearrange.sub_tasks.nav_to_obj_sensors import (
     DistToGoal,
     NavToPosSucc,
@@ -262,6 +263,54 @@ class GoalRecepSegmentationSensor(RecepSegmentationSensor):
     def _get_recep_goals(self, episode):
         return episode.candidate_goal_receps
 
+
+@registry.register_sensor
+class TimeOfDaySensor(Sensor):
+    cls_uuid: str = "time_of_day"
+
+    def __init__(self, sim, config, *args: Any, **kwargs: Any):
+        self._sim = sim
+        self._max_steps = config.max_episode_steps
+        self._wake_up_time = config.wake_up_time
+        self._sleep_time = config.sleep_time
+
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.TEXT
+
+    def _get_observation_space(self, *args, **kwargs):
+        return spaces.Box(
+            low=0,
+            high=1,
+            shape=(1,),
+            dtype=np.uint8,
+        )
+
+    def get_observation(self, observations, task, *args, **kwargs):
+        current_steps = task.measurements.measures[
+            NumStepsMeasure.cls_uuid
+        ].get_metric()
+        print("current_steps", current_steps)
+        breakpoint()
+        if current_steps is None:
+            current_steps = 0
+        elif current_steps == self._max_steps:
+            current_steps = 0
+        else:
+            current_steps += 1
+
+        total_hours = self._sleep_time - self._wake_up_time
+        mins_elapsed = current_steps / self._max_steps * total_hours * 60
+
+        # time will be in hh:mm format starting from wake up time (hh:00) and ending at sleep time (hh:00)
+        current_hour = self._wake_up_time + int(mins_elapsed // 60)
+        current_minute = np.floor(mins_elapsed % 60).astype(int)
+
+        return f"{current_hour:02d}:{current_minute:02d}"
 
 # Sensors for measuring success to pick goals
 @registry.register_measure

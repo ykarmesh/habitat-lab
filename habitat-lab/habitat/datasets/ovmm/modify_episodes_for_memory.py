@@ -126,11 +126,15 @@ def get_obj_rec_cat_in_eps(
     return obj_cats, start_rec_cats, goal_rec_cats
 
 
-def read_obj_category_mapping(filename, keep_only_recs=False):
+def read_obj_category_mapping(filename, keep_only_recs=False, keep_only_other_objects=False):
     """
     Returns a mapping from object name to category.
     Setting keep_only_recs to True keeps only receptacles.
     """
+    # check that both flags are not set to True
+    assert not (keep_only_recs and keep_only_other_objects), \
+        "Both keep_only_recs and keep_only_other_objects cannot be True"
+
     df = pd.read_csv(filename)
     name_key = "id" if "id" in df else "name"
     category_key = (
@@ -138,6 +142,9 @@ def read_obj_category_mapping(filename, keep_only_recs=False):
     )
     if keep_only_recs:
         df = df[df["hasReceptacles"] == True]
+    elif keep_only_other_objects:
+        df = df[df["hasReceptacles"] == False]
+        df = df[df["notes"] != "pickupable"]
 
     df["category"] = (
         df[category_key]
@@ -147,12 +154,16 @@ def read_obj_category_mapping(filename, keep_only_recs=False):
     return dict(zip(df[name_key], df["category"]))
 
 
-def get_cats_list(obj_category_mapping=None, rec_category_mapping=None):
+def get_cats_list(
+        obj_category_mapping=None,
+        rec_category_mapping=None,
+        other_obj_category_mapping=None,
+    ):
     """
     Extracts the lists of object and receptacle categories from episodes and returns name to id mappings
     """
     cat_to_id_mappings = []
-    for mapping in [obj_category_mapping, rec_category_mapping]:
+    for mapping in [obj_category_mapping, rec_category_mapping, other_obj_category_mapping]:
         cats = sorted(set(mapping.values()))
         cat_to_id_mappings.append({cat: i for i, cat in enumerate(cats)})
     return cat_to_id_mappings
@@ -415,6 +426,7 @@ def add_cat_fields_to_episodes(
     episodes_file,
     obj_to_id,
     rec_to_id,
+    other_obj_to_id,
     rec_cache_dir,
     num_episodes,
     config,
@@ -431,6 +443,7 @@ def add_cat_fields_to_episodes(
     # episodes = json.load(gzip.open(episodes_file))
     episodes["obj_category_to_obj_category_id"] = obj_to_id
     episodes["recep_category_to_recep_category_id"] = rec_to_id
+    episodes["other_obj_category_to_other_obj_category_id"] = other_obj_to_id
     receptacle_cache: Dict[str, Any] = {}
 
     sim = None
@@ -589,6 +602,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--obj_category_mapping_file", type=str, default=None)
     parser.add_argument("--rec_category_mapping_file", type=str, default=None)
+    parser.add_argument("--other_obj_category_mapping_file", type=str, default=None)
     parser.add_argument(
         "--num_episodes", type=int, default=-1
     )  # -1 uses all episodes
@@ -616,14 +630,26 @@ if __name__ == "__main__":
         rec_category_mapping = read_obj_category_mapping(
             args.rec_category_mapping_file, keep_only_recs=True
         )
+    
+    other_obj_category_mapping = None
+    if args.other_obj_category_mapping_file is not None:
+        other_obj_category_mapping = read_obj_category_mapping(
+            args.other_obj_category_mapping_file, keep_only_other_objects=False
+        )
+        # remove objects belonging to object category mapping or receptacle category mapping
+        other_obj_category_mapping = {
+            k: v for k, v in other_obj_category_mapping.items() if k not in obj_category_mapping and k not in rec_category_mapping
+        }
 
-    obj_to_id, rec_to_id = get_cats_list(
+    obj_to_id, rec_to_id, other_obj_to_id = get_cats_list(
         obj_category_mapping=obj_category_mapping,
         rec_category_mapping=rec_category_mapping,
+        other_obj_category_mapping=other_obj_category_mapping,
     )
     print(f"Number of object categories: {len(obj_to_id)}")
     print(f"Number of receptacle categories: {len(rec_to_id)}")
-    print(obj_to_id, rec_to_id)
+    print(f"Number of other object categories: {len(other_obj_to_id)}")
+    print(obj_to_id, rec_to_id, other_obj_to_id)
     # Add category fields and save episodes
 
     for split in os.listdir(source_data_dir):
@@ -637,6 +663,7 @@ if __name__ == "__main__":
             episodes_file,
             obj_to_id,
             rec_to_id,
+            other_obj_to_id,
             rec_cache_dir,
             num_episodes,
             config,

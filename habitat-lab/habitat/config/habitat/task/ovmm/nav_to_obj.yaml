@@ -31,9 +31,11 @@ defaults:
     - ovmm_nav_goal_segmentation_sensor
     - receptacle_segmentation_sensor
     - all_object_segmentation_sensor
+    - other_object_segmentation_sensor
     - object_embedding_sensor
     - robot_start_gps_sensor
     - robot_start_compass_sensor
+    - time_of_day_sensor
   - _self_
 
 type: OVMMNavToObjTask-v0
@@ -50,6 +52,7 @@ min_start_distance: 1.5
 camera_tilt: -0.5236
 receptacle_categories_file: data/objects/hssd-receptacles.csv
 object_categories_file: data/objects/object_categories.csv
+other_object_categories_file: data/objects/fpModels-v0.2.3.csv
 measurements:
   force_terminate:
     max_accum_force: 10_000.0

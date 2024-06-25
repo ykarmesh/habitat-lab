@@ -631,7 +631,6 @@ class RearrangeSim(HabitatSim):
                 # object_template = otm.get_templates_by_handle_substring(
                 #     obj_handle
                 # )
-                # breakpoint()
                 object_template = None
                 for obj_path in self._additional_object_paths:
                     object_template = osp.join(obj_path, obj_handle)
