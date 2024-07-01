@@ -804,25 +804,9 @@ class AllObjectSegmentationSensorConfig(LabSensorConfig):
 
 
 @dataclass
-class OtherObjectSegmentationSensorConfig(LabSensorConfig):
-    type: str = "OtherObjectSegmentationSensor"
-    blank_out_prob: float = 0.0
-
-
-@dataclass
 class OVMMNavGoalSegmentationSensorConfig(LabSensorConfig):
     type: str = "OVMMNavGoalSegmentationSensor"
     blank_out_prob: float = 0.0
-
-
-@dataclass
-class TimeOfDaySensorConfig(LabSensorConfig):
-    type: str = "TimeOfDaySensor"
-    max_episode_steps: int = (
-        EnvironmentConfig().max_episode_steps
-    )  # TODO : Use OmegaConf II()
-    wake_up_time: int = 6
-    sleep_time: int = 22
 
 
 @dataclass
@@ -1828,7 +1812,6 @@ class TaskConfig(HabitatBaseConfig):
     camera_tilt: float = -0.5236
     receptacle_categories_file: str = ""
     object_categories_file: str = ""
-    other_object_categories_file: str = ""
 
 
 @dataclass
@@ -2840,22 +2823,10 @@ cs.store(
     node=AllObjectSegmentationSensorConfig,
 )
 cs.store(
-    package="habitat.task.lab_sensors.other_object_segmentation_sensor",
-    group="habitat/task/lab_sensors",
-    name="other_object_segmentation_sensor",
-    node=OtherObjectSegmentationSensorConfig,
-)
-cs.store(
     package="habitat.task.lab_sensors.ovmm_nav_goal_segmentation_sensor",
     group="habitat/task/lab_sensors",
     name="ovmm_nav_goal_segmentation_sensor",
     node=OVMMNavGoalSegmentationSensorConfig,
-)
-cs.store(
-    package="habitat.task.lab_sensors.time_of_day_sensor",
-    group="habitat/task/lab_sensors",
-    name="time_of_day_sensor",
-    node=TimeOfDaySensorConfig,
 )
 
 # Task Measurements

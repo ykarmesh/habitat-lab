@@ -223,17 +223,6 @@ class AllObjectSegmentationSensor(MultiObjectSegmentationSensor):
         return task.object_semantic_ids
 
 
-@registry.register_sensor
-class OtherObjectSegmentationSensor(MultiObjectSegmentationSensor):
-    cls_uuid: str = "other_object_segmentation"
-
-    def _loaded_object_categories(self, task: OVMMDynNavRLEnv):
-        return task.loaded_other_object_categories
-
-    def _get_semantic_ids(self, task: OVMMDynNavRLEnv):
-        return task.other_object_semantic_ids
-
-
 @registry.register_measure
 class OVMMRotDistToGoal(RotDistToGoal):
     """
