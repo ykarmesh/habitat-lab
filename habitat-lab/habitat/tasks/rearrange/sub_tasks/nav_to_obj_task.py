@@ -149,7 +149,7 @@ class DynNavRLEnv(RearrangeTask):
             start_hold_obj_idx=start_hold_obj_idx,
         )
 
-    def reset(self, episode: Episode):
+    def reset(self, episode: Episode, fetch_observations: bool = True):
         super().reset(episode, fetch_observations=False)
 
         # in the case of Stretch, force the agent to look down and retract arm with the gripper pointing downwards
@@ -270,5 +270,9 @@ class DynNavRLEnv(RearrangeTask):
                 self._sim.viz_ids["nav_targ_pos"],
                 r=0.2,
             )
-        self._sim.maybe_update_articulated_agent()
-        return self._get_observations(episode)
+ 
+        if fetch_observations:
+            self._sim.maybe_update_articulated_agent()
+            return self._get_observations(episode)
+        else:
+            return None

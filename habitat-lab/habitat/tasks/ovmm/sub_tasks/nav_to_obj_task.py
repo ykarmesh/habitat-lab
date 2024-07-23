@@ -68,12 +68,12 @@ class OVMMDynNavRLEnv(DynNavRLEnv):
     def loaded_object_categories(self):
         return self._loaded_object_categories
 
-    def reset(self, episode: OVMMEpisode):
+    def reset(self, episode: OVMMEpisode, fetch_observations: bool = True):
         self._receptacle_semantic_ids = {}
         self._cache_receptacles()
         self._object_semantic_ids = {}
         self._cache_objects()
-        obs = super().reset(episode)
+        obs = super().reset(episode, fetch_observations)
         self._nav_to_obj_goal = np.stack(
             [
                 view_point.agent_state.position

@@ -485,7 +485,6 @@ class RearrangeEpisodeGenerator:
                     recep_set.exclude_receptacle_categories,
                 )
 
-
     def _reset_samplers(self) -> None:
         """
         Reset any sampler internal state related to a specific scene or episode.

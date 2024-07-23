@@ -1815,6 +1815,6 @@ linear_velocity: 1.0
 gpu_device_id: 0
 
 agent_camera_height: 1.31
-agent_camera_hfov: 42
+agent_camera_hfov: 43
 agent_camera_tilt_degrees: -30
 agent_camera_resolution: [160, 120]
