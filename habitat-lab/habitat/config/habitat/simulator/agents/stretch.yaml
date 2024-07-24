@@ -5,6 +5,7 @@ defaults:
 
 radius: 0.25
 height: 1.41
+max_climb: 0.01
 articulated_agent_type: "StretchRobot"
 articulated_agent_urdf: data/robots/hab_stretch/urdf/hab_stretch.urdf
 ik_arm_urdf: null

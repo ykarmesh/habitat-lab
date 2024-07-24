@@ -73,6 +73,10 @@ from habitat.utils.visualizations.utils import (
 )
 from habitat_sim.utils import viz_utils as vut
 
+import memorybench.config.default_structured_configs as default_configs
+import memorybench.dataset
+import memorybench.task
+
 try:
     import pygame
 except ImportError:
@@ -754,7 +758,7 @@ if __name__ == "__main__":
         task_config = config.habitat.task
 
         if not args.same_task:
-            sim_config.debug_render = True
+            sim_config.debug_render = False
             agent_config = get_agent_config(sim_config=sim_config)
             agent_config.sim_sensors.update(
                 {

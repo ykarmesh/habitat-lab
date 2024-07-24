@@ -225,7 +225,11 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
     """
     render_obs_images: List[np.ndarray] = []
     for sensor_name in observation:
-        if len(observation[sensor_name].shape) > 1:
+        try:
+            obs_shape = observation[sensor_name].shape
+        except:
+            continue
+        if len(obs_shape) > 1:
             obs_k = observation[sensor_name]
             if not isinstance(obs_k, np.ndarray):
                 obs_k = obs_k.cpu().numpy()
@@ -389,6 +393,8 @@ def overlay_frame(frame, info, additional=None):
     for k, v in flattened_info.items():
         if isinstance(v, str):
             lines.append(f"{k}: {v}")
+        elif "top_down_map" in k:
+            continue
         else:
             lines.append(f"{k}: {v:.2f}")
     if additional is not None:
