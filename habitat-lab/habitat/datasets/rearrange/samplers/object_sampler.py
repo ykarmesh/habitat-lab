@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import itertools
 import math
 import random
 import time
@@ -38,14 +39,14 @@ class ObjectSampler:
 
     def __init__(
         self,
-        object_set: List[str],
+        object_set: Dict[str, str],
         allowed_recep_set_names: List[str],
         sampler_range_type: str,
         num_objects: Optional[Tuple[int, int]] = None,
         orientation_sample: Optional[str] = None,
         sample_region_ratio: Optional[Dict[str, float]] = None,
         nav_to_min_distance: float = -1.0,
-        object_set_sample_probs: Optional[Dict[str, float]] = None,
+        object_set_sampling_scheme: Optional[Dict[str, float]] = None,
         recep_set_sample_probs: Optional[Dict[str, float]] = None,
         translation_up_offset: float = 0.08,
         constrain_to_largest_nav_island: bool = False,
@@ -53,13 +54,13 @@ class ObjectSampler:
     ) -> None:
         """
         :param object_set: The set objects from which placements will be sampled.
-        :param allowed_recep_set_names:
+        :param allowed_recep_set_names: The names of the ReceptacleSets to sample from.
         :param sampler_range_type: The type of range for the sampler. Options are: "fixed", "dynamic".
         :param num_objects: The [minimum, maximum] number of objects for this sampler. Actual target value for the sampler will be uniform random number in this range.
         :param orientation_sample: Optionally choose to sample object orientation as well as position. Options are: None, "up" (1D), "all" (rand quat).
         :param sample_region_ratio: Defines a XZ scaling of the sample region around its center. Default no scaling. Enables shrinking aabb receptacles away from edges.
         :param nav_to_min_distance: -1.0 means there will be no accessibility constraint. Positive values indicate minimum distance from sampled object to a navigable point.
-        :param object_set_sample_probs: Optionally provide a non-uniform weighting for object sampling.
+        :param object_set_sampling_scheme: Optionally provide a non-uniform weighting for object sampling.
         :param recep_set_sample_probs: Optionally provide a non-uniform weighting for receptacle sampling.
         :param translation_up_offset: Optionally offset sample points to improve likelyhood of successful placement on inflated collision shapes.
         :param check_if_in_largest_island_id: Optionally check if the snapped point is in the largest island id
@@ -68,7 +69,7 @@ class ObjectSampler:
         self.object_set = object_set
         self._allowed_recep_set_names = allowed_recep_set_names
         self._sampler_range_type = sampler_range_type
-        self._object_set_sample_probs = object_set_sample_probs
+        self._object_set_sampling_scheme = object_set_sampling_scheme
         self._recep_set_sample_probs = recep_set_sample_probs
         self._translation_up_offset = translation_up_offset
         self._constrain_to_largest_nav_island = constrain_to_largest_nav_island
@@ -274,17 +275,28 @@ class ObjectSampler:
         ]
         return target_receptacle
 
-    def sample_object(self) -> str:
+    def sample_object(self, category=None) -> str:
         """
         Sample an object handle from the object_set and return it.
         """
-        if self._object_set_sample_probs is not None:
-            sample_weights = [
-                self._object_set_sample_probs[k] for k in self.object_set
-            ]
-            return random.choices(self.object_set, weights=sample_weights)[0]
+        if type(self.object_set) == dict:
+            if category is not None:
+                return random.choices(self.object_set[category])[0], category
+            elif self._object_set_sampling_scheme == "category_balanced":
+                # sample category from the object set
+                category = random.choices(list(self.object_set.keys()))[0]
+                return random.choices(self.object_set[category])[0], category
+            elif self._object_set_sampling_scheme == "uniform":
+                # convert to list
+                self.object_set = list(itertools.chain.from_iterable(self.object_set.values()))
+                return self.object_set[random.randrange(0, len(self.object_set))], None
         else:
-            return self.object_set[random.randrange(0, len(self.object_set))]
+            if self._object_set_sampling_scheme == "uniform":
+                return self.object_set[random.randrange(0, len(self.object_set))], None
+        # if we haven't returned yet, the object set sampling scheme is not recognized
+        raise ValueError(
+            f"Object set sampling scheme {self._object_set_sampling_scheme} not recognized."
+        )
 
     def sample_placement(
         self,
@@ -480,6 +492,7 @@ class ObjectSampler:
         dbv: Optional[DebugVisualizer] = None,
         fixed_target_receptacle=None,
         fixed_obj_handle: Optional[str] = None,
+        fixed_obj_category: Optional[str] = None,
     ) -> Optional[habitat_sim.physics.ManagedRigidObject]:
         """
         Sample a single object placement by first sampling a Receptacle candidate, then an object, then attempting to place that object on the Receptacle.
@@ -490,15 +503,16 @@ class ObjectSampler:
         :param dbv: Optionally provide a DebugVisualizer (dbv)
         :param fixed_target_receptacle: Optionally provide a pre-selected Receptacle instead of sampling. For example, when a target object's receptacle is selected in advance.
         :param fixed_obj_handle: Optionally provide a pre-selected object instead of sampling. For example, when sampling the goal position for a known target object.
-
+        :param fixed_obj_category: Optionally provide a pre-selected category for object sampling.
         :return: The newly instanced rigid object or None if sampling failed.
         """
 
         # draw a new pairing
         if fixed_obj_handle is None:
-            object_handle = self.sample_object()
+            object_handle, obj_category = self.sample_object(fixed_obj_category)
         else:
             object_handle = fixed_obj_handle
+            obj_category = None
 
         if fixed_target_receptacle is not None:
             target_receptacle = fixed_target_receptacle
@@ -512,18 +526,14 @@ class ObjectSampler:
             sim, object_handle, target_receptacle, snap_down, dbv
         )
 
-        return new_object, target_receptacle
+        return new_object, target_receptacle, obj_category
 
     def set_num_samples(self) -> None:
         """
         Choose a target number of objects to sample from the configured range.
+        Setting this to the max value so that we can remove unstable objects later
         """
-
-        self.target_objects_number = (
-            random.randrange(self.num_objects[0], self.num_objects[1])
-            if self.num_objects[1] > self.num_objects[0]
-            else self.num_objects[0]
-        )
+        self.target_objects_number = self.num_objects[1]
 
     def sample(
         self,
@@ -549,7 +559,7 @@ class ObjectSampler:
 
         num_pairing_tries = 0
         new_objects: List[
-            Tuple[habitat_sim.physics.ManagedRigidObject, Receptacle]
+            Tuple[habitat_sim.physics.ManagedRigidObject, Receptacle, str]
         ] = []
         if object_idx_to_recep is None:
             object_idx_to_recep = {}
@@ -571,11 +581,17 @@ class ObjectSampler:
             else:
                 fixed_obj_handle = target_object_handles[cur_obj_idx]
 
+            if len(new_objects) > len(target_receptacles) and \
+                len(new_objects) < 2*len(target_receptacles):
+                fixed_obj_category = new_objects[cur_obj_idx - len(target_receptacles)][2]
+            else:
+                fixed_obj_category = None
+
             num_pairing_tries += 1
 
             if len(new_objects) < len(target_receptacles):
                 # sample objects explicitly from pre-designated target receptacles first
-                new_object, receptacle = self.single_sample(
+                new_object, receptacle, new_object_category = self.single_sample(
                     sim,
                     recep_tracker,
                     snap_down,
@@ -587,7 +603,7 @@ class ObjectSampler:
                 # tracking so don't double count.
             else:
                 # now follow the object_idx_to_recep mapping if it exists
-                new_object, receptacle = self.single_sample(
+                new_object, receptacle, new_object_category = self.single_sample(
                     sim,
                     recep_tracker,
                     snap_down,
@@ -596,6 +612,7 @@ class ObjectSampler:
                         cur_obj_idx, None
                     ),
                     fixed_obj_handle=fixed_obj_handle,
+                    fixed_obj_category=fixed_obj_category,
                 )
                 if (
                     new_object is not None
@@ -611,7 +628,7 @@ class ObjectSampler:
                 )
                 num_pairing_tries = 0
                 pairing_start_time = time.time()
-                new_objects.append((new_object, receptacle))
+                new_objects.append((new_object, receptacle, new_object_category))
 
         logger.info(
             f"    Sampling process completed in ({time.time()-sampling_start_time}sec)."
@@ -628,7 +645,7 @@ class ObjectSampler:
             f"    Only able to sample {len(new_objects)} out of {self.num_objects}..."
         )
         # cleanup
-        for new_object, _ in new_objects:
+        for new_object, _, _ in new_objects:
             sim.get_rigid_object_manager().remove_object_by_handle(
                 new_object.handle
             )

@@ -3,7 +3,7 @@
 # Copyright (c) Meta Platforms, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import random
 from typing import Dict, List, Optional, Tuple
 
 import habitat_sim
@@ -36,6 +36,16 @@ class ObjectTargetSampler(ObjectSampler):
             x.creation_attributes.handle for x in self.object_instance_set
         ]
         super().__init__(object_set, *args, **kwargs)
+
+    def set_num_samples(self) -> None:
+        """
+        Choose a target number of objects to sample from the configured range.
+        """
+        self.target_objects_number = (
+            random.randrange(self.num_objects[0], self.num_objects[1])
+            if self.num_objects[1] > self.num_objects[0]
+            else self.num_objects[0]
+        )
 
     def sample(
         self,
@@ -81,7 +91,7 @@ class ObjectTargetSampler(ObjectSampler):
                 raise ValueError(
                     f"Object {use_target.handle}, contained {object_to_containing_receptacle[use_target.handle].name}, target receptacle {use_recep.name}"
                 )
-            new_object, receptacle = self.single_sample(
+            new_object, receptacle, new_object_category = self.single_sample(
                 sim,
                 recep_tracker,
                 snap_down,

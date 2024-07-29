@@ -1183,7 +1183,7 @@ class RearrangeEpisodeGenerator:
             if obj_name in target_object_names
         ]
         logger.info(
-            f"{len(unstable_target_objects)} target objects are unstable."
+            f"{len(unstable_target_objects)}|{len(target_object_names)} target objects are unstable."
         )
 
         # optionally salvage the episode by removing unstable objects

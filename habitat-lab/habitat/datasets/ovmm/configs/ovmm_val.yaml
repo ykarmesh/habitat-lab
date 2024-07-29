@@ -1093,12 +1093,22 @@ object_target_samplers:
     nav_to_min_distance: 1.5
 
 agent_name: stretch_robot
-agent:
-  camera:
-    height: 1.31
-    hfov: 42
-    tilt_degrees: -30
-    resolution: [160, 120]
-  radius: 0.25
-  height: 1.41
-  max_climb: 0.01
+
+regenerate_new_mesh: True
+agent_radius: 0.25
+agent_height: 1.41
+agent_max_climb: 0.01
+
+check_navigable: True
+max_collision_rate_for_navigable: 0.8
+angle_threshold: 0.05
+angular_velocity: 1.0
+distance_threshold: 0.25
+linear_velocity: 1.0
+
+gpu_device_id: 0
+
+agent_camera_height: 1.31
+agent_camera_hfov: 43
+agent_camera_tilt_degrees: -30
+agent_camera_resolution: [160, 120]
