@@ -73,6 +73,10 @@ from habitat.utils.visualizations.utils import (
 )
 from habitat_sim.utils import viz_utils as vut
 
+import memorybench.config.default_structured_configs as default_configs
+import memorybench.dataset
+import memorybench.task
+
 try:
     import pygame
 except ImportError:
@@ -600,7 +604,11 @@ def play_env(env, args, config):
         else:
             use_ob = observations_to_image(obs, info)
             if not args.skip_render_text:
-                use_ob = overlay_frame(use_ob, info)
+                extra_text = []
+                for k, v in obs.items():
+                    if isinstance(v, str):
+                        extra_text.append(f"{k}: {v}")
+                use_ob = overlay_frame(use_ob, info, extra_text)
 
         draw_ob = use_ob[:]
 
@@ -754,7 +762,7 @@ if __name__ == "__main__":
         task_config = config.habitat.task
 
         if not args.same_task:
-            sim_config.debug_render = True
+            sim_config.debug_render = False
             agent_config = get_agent_config(sim_config=sim_config)
             agent_config.sim_sensors.update(
                 {
