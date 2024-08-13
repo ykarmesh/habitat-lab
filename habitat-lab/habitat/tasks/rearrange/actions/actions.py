@@ -416,7 +416,7 @@ class ArmRelPosReducedActionStretch(ArticulatedAgentAction):
         min_limit, max_limit = self.cur_articulated_agent.arm_joint_limits
 
         set_arm_pos = (
-            expanded_delta_pos + self.cur_articulated_agent.arm_motor_pos
+            expanded_delta_pos + self.cur_articulated_agent.arm_joint_pos
         )
         # Perform roll over to the joints so that the user cannot control
         # the motor 2, 3, 4 for the arm.
@@ -432,7 +432,6 @@ class ArmRelPosReducedActionStretch(ArticulatedAgentAction):
                     set_arm_pos[i] = min_limit[i]
         set_arm_pos = np.clip(set_arm_pos, min_limit, max_limit)
 
-        self.cur_articulated_agent.arm_motor_pos = set_arm_pos
         self.cur_articulated_agent.arm_joint_pos = set_arm_pos
         if self.cur_grasp_mgr.snap_idx is not None:
             # Holding onto an object, also kinematically update the object.
@@ -881,7 +880,6 @@ class ManipulationModeAction(ArticulatedAgentAction):
             if isinstance(self._sim.articulated_agent, StretchRobot):
                 # Turn the head to face the arm
                 task._in_manip_mode = True
-                self._sim.articulated_agent.arm_motor_pos = StretchJointStates.PRE_GRASP
                 self._sim.articulated_agent.arm_joint_pos = StretchJointStates.PRE_GRASP
                 # now turn the robot's base left by 90 degrees
                 obj_trans = self.cur_articulated_agent.sim_obj.transformation

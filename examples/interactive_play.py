@@ -47,6 +47,7 @@ Record and play back trajectories:
 import argparse
 import os
 import os.path as osp
+import sys
 import time
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -103,6 +104,7 @@ def get_input_vel_ctlr(
     agent_to_control,
     control_humanoid,
     humanoid_controller,
+    discrete_actions=False,
 ):
     if skip_pygame:
         return step_env(env, "empty", {}), None, False
@@ -113,6 +115,7 @@ def get_input_vel_ctlr(
     else:
         agent_k = ""
     arm_action_name = f"{agent_k}arm_action"
+    manip_action_name = "manipulation_mode"
 
     if control_humanoid:
         base_action_name = f"{agent_k}humanoidjoint_action"
@@ -148,7 +151,8 @@ def get_input_vel_ctlr(
         given_arm_action = True
 
     end_ep = False
-    magic_grasp = None
+    magic_grasp = [0.0, 0.0, 0.0]
+    manip_action = -1
 
     keys = pygame.key.get_pressed()
 
@@ -164,15 +168,26 @@ def get_input_vel_ctlr(
         if keys[pygame.K_j]:
             # Left
             base_action = [0, 1]
+            if discrete_actions:
+                base_action_name = "turn_left"
         elif keys[pygame.K_l]:
             # Right
             base_action = [0, -1]
+            if discrete_actions:
+                base_action_name = "turn_right"
         elif keys[pygame.K_k]:
             # Back
             base_action = [-1, 0]
+            if discrete_actions:
+                base_action_name = "stop"
         elif keys[pygame.K_i]:
             # Forward
             base_action = [1, 0]
+            if discrete_actions:
+                base_action_name = "move_forward"
+        elif keys[pygame.K_h]:
+            manip_action = 1
+            disc_act = "manip_mode"
 
         if arm_action_space.shape[0] == 7:
             # Velocity control. A different key for each joint
@@ -292,11 +307,19 @@ def get_input_vel_ctlr(
         if keys[pygame.K_p]:
             logger.info("[play.py]: Unsnapping")
             # Unsnap
-            magic_grasp = -1
+            # interupt the sim to get the pixel values
+            sys.stdin.flush()
+            x = input("Enter the pixel which belongs to the place receptacle: (e.g. 100, 200) ")
+            x = x.strip().split(",")
+            magic_grasp = [-1, int(x[0]), int(x[1])]
         elif keys[pygame.K_o]:
             # Snap
             logger.info("[play.py]: Snapping")
-            magic_grasp = 1
+            # interupt the sim to get the pixel values
+            sys.stdin.flush()
+            x = input("Enter the pixel which belongs to the pick object: (e.g. 100, 200) ")
+            x = x.strip().split(",")
+            magic_grasp = [1, int(x[0]), int(x[1])]
 
     if control_humanoid:
         if humanoid_controller is None:
@@ -365,7 +388,10 @@ def get_input_vel_ctlr(
 
     if base_action is not None and base_action_name in env.action_space.spaces:
         name = base_action_name
-        args = {base_key: base_action}
+        args = {base_key: base_action} if not discrete_actions else {}
+    elif manip_action > 0 and manip_action_name in env.action_space.spaces:
+        name = manip_action_name
+        args = {manip_action_name: [manip_action], "is_last_action": True}
     else:
         name = arm_action_name
         if given_arm_action:
@@ -534,6 +560,7 @@ def play_env(env, args, config):
             agent_to_control,
             args.control_humanoid,
             humanoid_controller=humanoid_controller,
+            discrete_actions=True
         )
 
         if not args.no_render and keys[pygame.K_c]:

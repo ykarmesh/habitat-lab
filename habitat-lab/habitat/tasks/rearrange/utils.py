@@ -459,7 +459,7 @@ def place_agent_at_dist_from_pos(
     """
     if orient_positions is None:
         orient_positions = target_positions
-    breakpoint()
+
     if distance_threshold == -1.0:
         if navmesh_offset is not None:
             return place_robot_at_closest_point_with_navmesh(
@@ -575,7 +575,7 @@ def set_agent_base_via_obj_trans(position: np.ndarray, rotation: float, agent):
 
 
 def _get_robot_spawns(
-    target_position: np.ndarray,
+    target_positions: np.ndarray,
     rotation_perturbation_noise: float,
     distance_threshold: float,
     sim,
