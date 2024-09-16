@@ -188,6 +188,10 @@ def get_input_vel_ctlr(
         elif keys[pygame.K_h]:
             manip_action = 1
             disc_act = "manip_mode"
+        elif keys[pygame.K_v]:
+            base_action = [-1, 0]       # Not sure what to supply here but this is not used if discrete_actions=True
+            if discrete_actions:
+                base_action_name = "pddl_intermediate_stop"
 
         if arm_action_space.shape[0] == 7:
             # Velocity control. A different key for each joint

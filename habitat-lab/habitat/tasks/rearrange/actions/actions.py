@@ -1058,7 +1058,8 @@ class BaseWaypointTeleportAction(ArticulatedAgentAction):
         lin_pos_z = (
             np.clip(lin_pos_z, -1, 1) * self._max_displacement_along_axis
         )
-        ang_pos = np.clip(turn, -1, 1) * self._max_turn_radians
+        # ang_pos = np.clip(turn, -1, 1) * self._max_turn_radians
+        ang_pos = np.clip(turn, -np.pi, np.pi)      # NOTE: We work directly with actual turn angle values (in rad) instead of normalized angles
 
         # Do not allow small movements
         if np.abs(ang_pos) < self._min_turn_radians:
@@ -1099,7 +1100,7 @@ class BaseWaypointTeleportAction(ArticulatedAgentAction):
         else:
             # no violation if no movement was required in the first place
             task._is_navmesh_violated = False
-        if is_last_action:
-            return self._sim.step(HabitatSimActions.base_velocity)
-        else:
-            return {}
+        # if is_last_action:
+        #     return self._sim.step(HabitatSimActions.base_velocity)
+        # else:
+        #     return {}
