@@ -87,9 +87,19 @@ class InferenceWorkerProcess(ProcessBase):
             self.config.habitat_baselines.rl.ver.overlap_rollouts_and_learn
         )
         with inference_mode():
-            self.actor_critic = baseline_registry.get_policy(
-                self.policy_name
-            ).from_config(*self.policy_args)
+            # self.actor_critic = baseline_registry.get_policy(
+            #     self.policy_name
+            # ).from_config(*self.policy_args)
+            agent_name = self.config.habitat.simulator.agents_order[0]
+            policy = baseline_registry.get_policy(
+                self.config.habitat_baselines.rl.policy[agent_name].name
+            )
+            self.actor_critic = policy.from_config(
+                config=self.policy_args[0],
+                observation_space=self.policy_args[1],
+                action_space=self.policy_args[2],
+                agent_name=agent_name,
+            )
             self.actor_critic.eval()
             self.actor_critic.aux_loss_modules.clear()
             self.actor_critic.to(device=self.device)

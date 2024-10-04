@@ -84,7 +84,11 @@ def overwrite_config(
                 if trans_dict is not None and low_attr in trans_dict:
                     setattr(config_to, low_attr, trans_dict[low_attr](value))
                 else:
-                    setattr(config_to, low_attr, if_config_to_lower(value))
+                    try:
+                        setattr(config_to, low_attr, if_config_to_lower(value))
+                    except Exception as e:
+                        print(f"Error encountered while setting {low_attr}. Retrying...")
+                        setattr(config_to, low_attr, if_config_to_lower(value))
             else:
                 raise NameError(
                     f"""{low_attr} is not found on habitat_sim but is found on habitat_lab config.
