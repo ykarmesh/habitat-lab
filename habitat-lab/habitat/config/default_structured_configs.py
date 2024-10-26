@@ -2129,7 +2129,15 @@ class SimulatorConfig(HabitatBaseConfig):
     object_ids_start: int = 50
     # Configuration for rendering
     renderer: RendererConfig = RendererConfig()
-
+    
+    # By default, RearrangeSim never closes the underlying Simulator object which causes memory leaks with large number of scenes/OVMM objects
+    # So we close the underlying object every "N" number of resets  
+    rearrange_sim_close_threshold: int = 128
+    # While closing the simulator object, should we destory the instance or not ? This doesnt seem to make any difference for training
+    rearrange_sim_destroy_flag: bool = False
+    # Scenes for which we will dynamically recompute navmesh as these scenes cause issues in navmesh loading and usage
+    scenes_recompute_navmesh: List[str] = field(default_factory=list)
+    recompute_navmesh_temp_dir: str = ""
 
 @dataclass
 class PyrobotSensor(HabitatBaseConfig):

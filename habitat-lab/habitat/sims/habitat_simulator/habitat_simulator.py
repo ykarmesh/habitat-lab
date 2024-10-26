@@ -513,6 +513,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         habitat_config: DictConfig,
         ep_info: Optional[Episode] = None,
         should_close_on_new_scene: bool = True,
+        destroy_flag: bool = False,
     ) -> None:
         # TODO(maksymets): Switch to Habitat-Sim more efficient caching
         is_same_scene = habitat_config.scene == self._current_scene
@@ -521,7 +522,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         if not is_same_scene:
             self._current_scene = habitat_config.scene
             if should_close_on_new_scene:
-                self.close(destroy=False)
+                self.close(destroy=destroy_flag)
             super().reconfigure(self.sim_config)
 
         self._update_agents_state()

@@ -110,6 +110,7 @@ class VERTrainer(PPOTrainer):
             self.config,
             self.mp_ctx,
             self.queues,
+            local_rank,
         )
         [ew.start() for ew in self.environment_workers]
         [ew.reset() for ew in self.environment_workers]

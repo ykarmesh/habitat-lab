@@ -21,6 +21,7 @@ from typing import (
 
 import attr
 import numpy as np
+import torch
 
 from habitat import RLEnv, logger, make_dataset
 from habitat.config import read_write
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
     from omegaconf import DictConfig
 
 
-MIN_SCENES_PER_ENV = 16
+MIN_SCENES_PER_ENV = 1
 
 T = TypeVar("T")
 
@@ -329,13 +330,39 @@ def _make_proc_config(config, rank, scenes=None, scene_splits=None):
     return proc_config
 
 
-def _create_worker_configs(config: "DictConfig"):
+def read_scenes_by_group(file_path, group_id):
+    scenes = []
+    total_ep_count = 0
+
+    # Open the file containing the scene-to-group mapping
+    with open(file_path, 'r') as file:
+        for line in file:
+            # Each line contains a scene ID followed by a group ID
+            scene_id, scene_group, ep_count = line.strip().split(',')
+            
+            # If the scene belongs to the given group ID, add it to the list
+            if int(scene_group) == group_id:
+                scenes.append(scene_id)
+                total_ep_count += int(ep_count)
+    
+    return scenes, total_ep_count
+
+
+def _create_worker_configs(config: "DictConfig", rank: int = None):
     num_environments = config.habitat_baselines.num_environments
 
     dataset = make_dataset(config.habitat.dataset.type)
     scenes = config.habitat.dataset.content_scenes
     if "*" in config.habitat.dataset.content_scenes:
-        scenes = dataset.get_scenes_to_load(config.habitat.dataset)
+        # If we are running distributed training for imagenav policy, we will distribute the scenes across multiple GPUs instead of running all scenes on each GPU
+        if rank is not None:
+            gpu_scene_split_file = config.habitat_baselines.gpu_scene_split_file
+            scenes, ep_count = read_scenes_by_group(gpu_scene_split_file, rank)
+            logger.info(f"GPU Rank: {rank} ----> Scenes {scenes}")
+            logger.info(f"GPU Rank: {rank} ----> Num scenes: {len(scenes)}, Num episodes: {ep_count}")
+        else:
+            logger.info("Using all scenes in each environment worker !")
+            scenes = dataset.get_scenes_to_load(config.habitat.dataset)
 
     # We use a minimum number of scenes per environment to reduce bias
     scenes_per_env = max(
@@ -363,8 +390,9 @@ def construct_environment_workers(
     config: "DictConfig",
     mp_ctx: BaseContext,
     worker_queues: WorkerQueues,
+    local_rank: int,
 ) -> List[EnvironmentWorker]:
-    configs = _create_worker_configs(config)
+    configs = _create_worker_configs(config, local_rank)
 
     return _construct_environment_workers_impl(
         configs,

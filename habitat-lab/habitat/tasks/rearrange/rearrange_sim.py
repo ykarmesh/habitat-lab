@@ -58,6 +58,7 @@ from habitat_sim.nav import NavMeshSettings
 from habitat_sim.physics import CollisionGroups, JointMotorSettings, MotionType
 from habitat_sim.sim import SimulatorBackend
 from habitat_sim.utils.common import quat_from_magnum
+from habitat.core.logging import logger as core_logger
 
 if TYPE_CHECKING:
     from omegaconf import DictConfig
@@ -155,7 +156,16 @@ class RearrangeSim(HabitatSim):
 
         self._sleep_dist = self.habitat_config.sleep_dist
         self._object_ids_start = self.habitat_config.object_ids_start
-
+        
+        # We will close the underlying simulator object every "N" steps to prevent memory leaks
+        self._sim_reset_counter = 0
+        self._sim_reset_threshold = self.habitat_config.rearrange_sim_close_threshold
+        self._rearrange_sim_destroy_flag = self.habitat_config.rearrange_sim_destroy_flag
+        core_logger.info(f"Sim close/reset threshold set to {self._sim_reset_threshold}")
+        
+        # For some scenes with erroneous navmeshes, we will recompute the navmesh on the fly
+        self._scenes_to_recompute_navmesh = self.habitat_config.scenes_recompute_navmesh
+        self._recompute_navmesh_temp_dir = self.habitat_config.recompute_navmesh_temp_dir
 
     def enable_perf_logging(self):
         """
@@ -327,7 +337,20 @@ class RearrangeSim(HabitatSim):
             with read_write(config):
                 config["scene"] = ep_info.scene_id
             t_start = time.time()
-            super().reconfigure(config, should_close_on_new_scene=False)
+            
+            close_flag = None
+            if (self._sim_reset_counter + 1) == self._sim_reset_threshold:
+                close_flag = True
+                self._sim_reset_counter = 0
+            else:
+                close_flag = False
+                self._sim_reset_counter += 1
+
+            super().reconfigure(
+                config,
+                should_close_on_new_scene=close_flag,
+                destroy_flag=self._rearrange_sim_destroy_flag
+            )
             self.add_perf_timing("super_reconfigure", t_start)
             # The articulated object handles have changed.
             self._start_art_states = {}
@@ -482,14 +505,25 @@ class RearrangeSim(HabitatSim):
         base_dir = osp.join(*ep_info.scene_id.split("/")[:2])
 
         navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
+        
+        # Some ep ids causing navmehs error so we recompute the navmesh for them
+        if ep_info.scene_id in self._scenes_to_recompute_navmesh:
+            core_logger.info(f"Detected Error Episode ID: {ep_info.episode_id} ----> Setting navmesh path to empty string")
+            base_dir = self._recompute_navmesh_temp_dir
+            navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
 
-        if osp.exists(navmesh_path):
+        if osp.exists(navmesh_path) and ep_info.scene_id not in self._scenes_to_recompute_navmesh:
             self.pathfinder.load_nav_mesh(navmesh_path)
             logger.info(f"Loaded navmesh from {navmesh_path}")
         else:
-            logger.warning(
-                f"Requested navmesh to load from {navmesh_path} does not exist. Recomputing from configured values and caching."
-            )
+            if ep_info.scene_id in self._scenes_to_recompute_navmesh:
+                core_logger.info(
+                    f"Forcefully recomputing navmesh for episode ID: {ep_info.episode_id}"
+                )
+            else:
+                logger.warning(
+                    f"Requested navmesh to load from {navmesh_path} does not exist. Recomputing from configured values and caching."
+                )
             navmesh_settings = NavMeshSettings()
             navmesh_settings.set_defaults()
 
