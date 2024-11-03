@@ -501,47 +501,49 @@ class RearrangeSim(HabitatSim):
 
     @add_perf_timing_func()
     def _load_navmesh(self, ep_info):
-        scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
-        base_dir = osp.join(*ep_info.scene_id.split("/")[:2])
+        # scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
+        # base_dir = osp.join(*ep_info.scene_id.split("/")[:2])
 
-        navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
+        # navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
         
-        # Some ep ids causing navmehs error so we recompute the navmesh for them
-        if ep_info.scene_id in self._scenes_to_recompute_navmesh:
-            core_logger.info(f"Detected Error Episode ID: {ep_info.episode_id} ----> Setting navmesh path to empty string")
-            base_dir = self._recompute_navmesh_temp_dir
-            navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
+        # # Some ep ids causing navmehs error so we recompute the navmesh for them
+        # if ep_info.scene_id in self._scenes_to_recompute_navmesh:
+        #     core_logger.info(f"Detected Error Episode ID: {ep_info.episode_id} ----> Setting navmesh path to empty string")
+        #     base_dir = self._recompute_navmesh_temp_dir
+        #     navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
 
-        if osp.exists(navmesh_path) and ep_info.scene_id not in self._scenes_to_recompute_navmesh:
-            self.pathfinder.load_nav_mesh(navmesh_path)
-            logger.info(f"Loaded navmesh from {navmesh_path}")
+        # if osp.exists(navmesh_path) and ep_info.scene_id not in self._scenes_to_recompute_navmesh:
+        #     self.pathfinder.load_nav_mesh(navmesh_path)
+        #     logger.info(f"Loaded navmesh from {navmesh_path}")
+        # else:
+        #     if ep_info.scene_id in self._scenes_to_recompute_navmesh:
+        #         core_logger.info(
+        #             f"Forcefully recomputing navmesh for episode ID: {ep_info.episode_id}"
+        #         )
+        #     else:
+        #         logger.warning(
+        #             f"Requested navmesh to load from {navmesh_path} does not exist. Recomputing from configured values and caching."
+        #         )
+        
+        navmesh_settings = NavMeshSettings()
+        navmesh_settings.set_defaults()
+
+        agent_config = None
+        if hasattr(self.habitat_config.agents, "agent_0"):
+            agent_config = self.habitat_config.agents.agent_0
+        elif hasattr(self.habitat_config.agents, "main_agent"):
+            agent_config = self.habitat_config.agents.main_agent
         else:
-            if ep_info.scene_id in self._scenes_to_recompute_navmesh:
-                core_logger.info(
-                    f"Forcefully recomputing navmesh for episode ID: {ep_info.episode_id}"
-                )
-            else:
-                logger.warning(
-                    f"Requested navmesh to load from {navmesh_path} does not exist. Recomputing from configured values and caching."
-                )
-            navmesh_settings = NavMeshSettings()
-            navmesh_settings.set_defaults()
-
-            agent_config = None
-            if hasattr(self.habitat_config.agents, "agent_0"):
-                agent_config = self.habitat_config.agents.agent_0
-            elif hasattr(self.habitat_config.agents, "main_agent"):
-                agent_config = self.habitat_config.agents.main_agent
-            else:
-                raise ValueError(f"Cannot find agent parameters.")
-            navmesh_settings.agent_radius = agent_config.radius
-            navmesh_settings.agent_height = agent_config.height
-            navmesh_settings.agent_max_climb = agent_config.max_climb
-            navmesh_settings.agent_max_slope = agent_config.max_slope
-            navmesh_settings.include_static_objects = True
-            self.recompute_navmesh(self.pathfinder, navmesh_settings)
-            os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
-            self.pathfinder.save_nav_mesh(navmesh_path)
+            raise ValueError(f"Cannot find agent parameters.")
+        navmesh_settings.agent_radius = agent_config.radius
+        navmesh_settings.agent_height = agent_config.height
+        navmesh_settings.agent_max_climb = agent_config.max_climb
+        navmesh_settings.agent_max_slope = agent_config.max_slope
+        navmesh_settings.include_static_objects = True
+        self.recompute_navmesh(self.pathfinder, navmesh_settings)
+        
+        # os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
+        # self.pathfinder.save_nav_mesh(navmesh_path)
 
         # NOTE: allowing indoor islands only
         self._largest_indoor_island_idx = get_largest_island_index(
