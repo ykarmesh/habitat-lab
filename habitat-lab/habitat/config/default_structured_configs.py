@@ -2138,7 +2138,10 @@ class SimulatorConfig(HabitatBaseConfig):
     # Scenes for which we will dynamically recompute navmesh as these scenes cause issues in navmesh loading and usage
     scenes_recompute_navmesh: List[str] = field(default_factory=list)
     recompute_navmesh_temp_dir: str = ""
-
+    
+    # Directory which contains navmeshes used to generate the original dataset. We will ensure that we sue the original navmeshes provided with the dataset to prevent issues due to navmesh recomputation 
+    dataset_navmesh_dir: str = ""
+    
 @dataclass
 class PyrobotSensor(HabitatBaseConfig):
     pass

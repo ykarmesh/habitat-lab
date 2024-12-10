@@ -166,6 +166,7 @@ class RearrangeSim(HabitatSim):
         # For some scenes with erroneous navmeshes, we will recompute the navmesh on the fly
         self._scenes_to_recompute_navmesh = self.habitat_config.scenes_recompute_navmesh
         self._recompute_navmesh_temp_dir = self.habitat_config.recompute_navmesh_temp_dir
+        self._dataset_navmesh_dir = self.habitat_config.dataset_navmesh_dir
 
     def enable_perf_logging(self):
         """
@@ -502,9 +503,17 @@ class RearrangeSim(HabitatSim):
     @add_perf_timing_func()
     def _load_navmesh(self, ep_info):
         scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
-        base_dir = osp.join(*ep_info.scene_id.split("/")[:2])
-
-        navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
+        if self._dataset_navmesh_dir != "":
+            navmesh_path = osp.join(self._dataset_navmesh_dir, scene_name + ".navmesh")     # We use the navmeshes provided with the dataset, if the navmesh directory has been specified
+            core_logger.info(
+                f"Using the navmesh supplied with the episode dataset at path:{navmesh_path} for episode: {ep_info.episode_id}"
+            )
+        else:
+            base_dir = osp.join(*ep_info.scene_id.split("/")[:2])       # Otherwise, we try to use the navmeshes in the default data/ folder if they are available. If not available, we will recompute the navmesh
+            navmesh_path = osp.join(base_dir, "navmeshes", scene_name + ".navmesh")
+            core_logger.info(
+                f"[WARNING] Not using the navmesh supplied with the episode dataset. Will use default navmesh in data/ folder: {navmesh_path} for episode: {ep_info.episode_id}"
+            )
         
         # Some ep ids causing navmehs error so we recompute the navmesh for them
         if ep_info.scene_id in self._scenes_to_recompute_navmesh:
@@ -518,11 +527,11 @@ class RearrangeSim(HabitatSim):
         else:
             if ep_info.scene_id in self._scenes_to_recompute_navmesh:
                 core_logger.info(
-                    f"Forcefully recomputing navmesh for episode ID: {ep_info.episode_id}"
+                    f"[WARNING] Forcefully recomputing navmesh for episode ID: {ep_info.episode_id}"
                 )
             else:
                 logger.warning(
-                    f"Requested navmesh to load from {navmesh_path} does not exist. Recomputing from configured values and caching."
+                    f"[WARNING] Requested navmesh to load from {navmesh_path} does not exist. Recomputing from configured values and caching."
                 )
         
                 navmesh_settings = NavMeshSettings()
