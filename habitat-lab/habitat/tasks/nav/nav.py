@@ -1036,6 +1036,13 @@ class DistanceToGoal(Measure):
                 logger.error(
                     f"Non valid distance_to parameter was provided: {self._distance_to }"
                 )
+                
+            # Check for infinity
+            from habitat.core.logging import logger
+            if np.isinf(distance_to_target):
+                logger.warning(
+                    f"Distance to target is infinity for episode {episode.episode_id}, scene_id: {episode.scene_id}, distance_to type: {self._distance_to}"
+                )
 
             self._previous_position = (
                 current_position[0],

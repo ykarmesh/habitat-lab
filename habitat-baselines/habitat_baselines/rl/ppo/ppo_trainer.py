@@ -273,7 +273,7 @@ class PPOTrainer(BaseRLTrainer):
             assert (
                 self._encoder is not None
             ), "Visual encoder is not specified for this actor"
-            with inference_mode():
+            with torch.no_grad():       # Use torch.no_grad() as torch.inference_mode() causes issue with VC-1 feature caching
                 batch[
                     PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY
                 ] = self._encoder(batch)
@@ -465,7 +465,7 @@ class PPOTrainer(BaseRLTrainer):
             )
 
         if self._is_static_encoder:
-            with inference_mode(), g_timer.avg_time("trainer.visual_features"):
+            with torch.no_grad(), g_timer.avg_time("trainer.visual_features"):      # Use torch.no_grad() as torch.inference_mode() causes issue with VC-1 feature caching
                 batch[
                     PointNavResNetNet.PRETRAINED_VISUAL_FEATURES_KEY
                 ] = self._encoder(batch)

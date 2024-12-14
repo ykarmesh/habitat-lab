@@ -215,7 +215,7 @@ class SingleAgentAccessMgr(AgentAccessMgr):
                 }
             )
         elif self._config.habitat_baselines.rl.ddppo.pretrained_encoder:
-            prefix = "actor_critic.net.visual_encoder."
+            prefix = "net.visual_encoder."
             actor_critic.net.visual_encoder.load_state_dict(
                 {
                     k[len(prefix) :]: v
@@ -223,6 +223,7 @@ class SingleAgentAccessMgr(AgentAccessMgr):
                     if k.startswith(prefix)
                 }
             )
+            logger.info(f"Sucessfully loaded pretrained visual encoder from: {self._config.habitat_baselines.rl.ddppo.pretrained_weights}")
         if self._is_static_encoder:
             for param in actor_critic.visual_encoder.parameters():
                 param.requires_grad_(False)
