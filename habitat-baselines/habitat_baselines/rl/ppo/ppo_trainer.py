@@ -840,6 +840,27 @@ class PPOTrainer(BaseRLTrainer):
         with read_write(config):
             config.habitat.dataset.split = config.habitat_baselines.eval.split
 
+        # The loaded checkpoint config points to the dataset/num_environments used during training. We will override with the dataset paths and num_environments passed during job launch which are still present in the self.config object
+        with read_write(config):
+            overrides = {
+                "data_path": self.config.habitat.dataset.data_path,
+                "viewpoints_matrix_path": self.config.habitat.dataset.viewpoints_matrix_path,
+                "transformations_matrix_path": self.config.habitat.dataset.transformations_matrix_path,
+                "num_environments": self.config.habitat_baselines.num_environments,
+            }
+
+            # Apply overrides to config
+            config.habitat.dataset.data_path = overrides["data_path"]
+            config.habitat.dataset.viewpoints_matrix_path = overrides["viewpoints_matrix_path"]
+            config.habitat.dataset.transformations_matrix_path = overrides["transformations_matrix_path"]
+            config.habitat_baselines.num_environments = overrides["num_environments"]
+
+            # Log overridden parameters
+            logger.info(
+                f"Overriding loaded checkpoint config with: " +
+                ", ".join(f"{key}={value}" for key, value in overrides.items())
+            )
+
         if len(self.config.habitat_baselines.eval.video_option) > 0:
             n_agents = len(config.habitat.simulator.agents)
             for agent_i in range(n_agents):
