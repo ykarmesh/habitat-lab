@@ -204,7 +204,11 @@ def tile_images(render_obs_images: List[np.ndarray]) -> np.ndarray:
     return final_im
 
 
-def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
+def observations_to_image(
+    observation: Dict,
+    info: Dict,
+    max_scale_semantic_sensor: Optional[Dict[str, int]] = None
+) -> np.ndarray:
     r"""Generate image of single frame from observation and info
     returned from a single environment step().
 
@@ -225,6 +229,14 @@ def observations_to_image(observation: Dict, info: Dict) -> np.ndarray:
                 obs_k = obs_k * 255.0
                 obs_k = obs_k.astype(np.uint8)
             if obs_k.shape[2] == 1:
+                if max_scale_semantic_sensor is not None and sensor_name in max_scale_semantic_sensor and max_scale_semantic_sensor[sensor_name] != -1:
+                    # convert images from [0, max_scale_semantic_sensor] to [128, 255]
+                    # we want only non-background pixels to be offset by 128 and keep the 0 pixels as 0
+                    mask = obs_k == 0            
+                    obs_k = obs_k * (127.0 / max_scale_semantic_sensor[sensor_name]) + 128.0
+                    obs_k[mask] = 0
+                    # print(f"sensor_name: {sensor_name}, min: {obs_k.min()}, max: {obs_k.max()}")
+                    obs_k = obs_k.astype(np.uint8)
                 obs_k = np.concatenate([obs_k for _ in range(3)], axis=2)
             render_obs_images.append(obs_k)
 
@@ -356,6 +368,8 @@ def overlay_frame(frame, info, additional=None):
     flattened_info = flatten_dict(info)
     for k, v in flattened_info.items():
         if isinstance(v, str):
+            lines.append(f"{k}: {v}")
+        elif isinstance(v, list):
             lines.append(f"{k}: {v}")
         else:
             lines.append(f"{k}: {v:.2f}")

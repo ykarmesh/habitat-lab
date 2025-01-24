@@ -387,6 +387,7 @@ class PPOTrainer(BaseRLTrainer):
                     act = act.item()
                 self.envs.async_step_at(index_env, act)
 
+        # print(action_data.actions.mean())
         with g_timer.avg_time("trainer.obs_insert"):
             self._agent.rollouts.insert(
                 next_recurrent_hidden_states=action_data.rnn_hidden_states,
@@ -541,7 +542,11 @@ class PPOTrainer(BaseRLTrainer):
                 device="cpu",
                 dtype=torch.float32,
             )
-            stats = self._all_reduce(stats)
+            try:
+                stats = self._all_reduce(stats)
+            except Exception as e:
+                print(loss_name_ordering)
+                raise e
             count_steps_delta = int(stats[-1].item())
             stats /= torch.distributed.get_world_size()
 

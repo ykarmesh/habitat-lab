@@ -36,6 +36,9 @@ class PointNavDatasetV1(Dataset):
 
     @staticmethod
     def check_config_paths_exist(config: "DictConfig") -> bool:
+        assert os.path.exists(config.data_path.format(split=config.split)), \
+            "dataset not found in {}".format(config.data_path.format(split=config.split))
+        assert os.path.exists(config.scenes_dir), "Scene not found {}".format(config.scenes_dir)
         return os.path.exists(
             config.data_path.format(split=config.split)
         ) and os.path.exists(config.scenes_dir)

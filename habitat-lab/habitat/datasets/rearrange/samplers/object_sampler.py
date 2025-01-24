@@ -336,7 +336,7 @@ class ObjectSampler:
                         target_object_id=new_object.object_id,
                     ):
                         logger.info(
-                            "   - object is not accessible from navmesh, rejecting placement."
+                            f"   - object is not accessible from navmesh, rejecting placement.(scene id: {sim.config.sim_cfg.scene_id}) "
                         )
                         continue
                     return new_object

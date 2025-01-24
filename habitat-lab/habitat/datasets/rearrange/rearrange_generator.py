@@ -7,6 +7,8 @@
 import os.path as osp
 import random
 import time
+import json
+import traceback
 from collections import defaultdict
 
 try:
@@ -458,21 +460,28 @@ class RearrangeEpisodeGenerator:
         """
         generated_episodes: List[RearrangeEpisode] = []
         failed_episodes = 0
+        success_fail_dict = {"success": [], "fail": []}
         if verbose:
             pbar = tqdm(total=num_episodes)
         while len(generated_episodes) < num_episodes:
             try:
                 self._scene_sampler.set_cur_episode(len(generated_episodes))
                 new_episode = self.generate_single_episode()
-            except Exception:
+            except Exception as e:
                 new_episode = None
-                logger.error("Generation failed with exception...")
+                logger.error(f"Generation failed with exception... {e}")
+                logger.error(traceback.format_exc())
             if new_episode is None:
                 failed_episodes += 1
+                success_fail_dict["fail"].append(self.scene_name_for_saving)
                 continue
             generated_episodes.append(new_episode)
+            success_fail_dict["success"].append(self.scene_name_for_saving)
             if verbose:
                 pbar.update(1)
+                # update the success_fail_dict in the disk
+                with open(self.vdb.output_path + "/success_fail_dict.json", "w") as f:
+                    json.dump(success_fail_dict, f)
         if verbose:
             pbar.close()
 
@@ -507,6 +516,7 @@ class RearrangeEpisodeGenerator:
         )
 
         scene_name = ep_scene_handle.split(".")[0]
+        self.scene_name_for_saving = scene_name
         navmesh_path = osp.join(
             scene_base_dir, "navmeshes", scene_name + ".navmesh"
         )

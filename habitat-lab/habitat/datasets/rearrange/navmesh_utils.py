@@ -28,7 +28,7 @@ def snap_point_is_occluded(
     :property granularity: The distance between raycast samples. Finer granularity is more accurate, but more expensive.
     :property target_object_id: An optional object id which should be ignored in occlusion check.
 
-    NOTE: If agent's eye height is known and only that height should be considered, provide eye height and granulatiry > height for fastest check.
+    NOTE: If agent's eye height is known and only that height should be considered, provide eye height and granularity > height for fastest check.
 
     :return: whether or not the target is considered occluded from the snap_point.
     """
@@ -89,7 +89,6 @@ def unoccluded_navmesh_snap(
 
     :return: An approximation of the closest unoccluded snap point to pos or None if an unoccluded point could not be found.
     """
-
     # first try the closest snap point
     snap_point = pathfinder.snap_point(pos, island_id)
     is_occluded = snap_point_is_occluded(

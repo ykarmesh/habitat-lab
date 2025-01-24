@@ -996,6 +996,6 @@ def get_navigable_receptacles(
             navigable_receptacles.append(receptacle)
 
     logger.info(
-        f"Found {len(navigable_receptacles)}/{len(receptacles)} accessible receptacles."
+        f"Found {len(navigable_receptacles)}/{len(receptacles)} accessible receptacles (scene id: {sim.config.sim_cfg.scene_id})."
     )
     return navigable_receptacles
